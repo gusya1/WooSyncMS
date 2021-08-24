@@ -36,7 +36,6 @@ class ProductsSyncro:
             else:
                 ms_products = list(MSApi.gen_products(filters=Filter.eq('name', wc_name)))
                 if len(ms_products) == 1:
-                    print(f"{wc_name}\tsuccess")
                     wc_meta_list = wc_product.get('meta_data')
                     wc_meta_list.append({
                         'key': 'wooms_id',
@@ -44,6 +43,7 @@ class ProductsSyncro:
                     })
                     response = self.wcapi.put(f'products/{wc_product.get("id")}',
                                               data={'meta_data': wc_meta_list})
+                    print(f"{wc_name}\tsuccess")
                     if response.status_code != 200:
                         raise Exception(response.json())
                 elif len(ms_products) > 1:
@@ -53,22 +53,25 @@ class ProductsSyncro:
 
     def check_products_part_eq(self):
         from fuzzywuzzy import fuzz
+        print("Loading MS products...")
         ms_products = []
         for ms_product in MSApi.gen_products():
             ms_products.append((ms_product.get_name(), ms_product.get_meta()))
 
+        print("Loading WC products...")
         wc_products = []
         for wc_product in self.__gen_all_wc_products():
             if self.__get_wooms_meta(wc_product) is None:
                 wc_products.append((wc_product.get('name'), wc_product.get('id')))
-
-        for ms_product in ms_products:
-            for wc_product in wc_products:
+        for wc_product in wc_products:
+            for ms_product in ms_products:
                 ratio = fuzz.partial_ratio(ms_product[0], wc_product[0])
-                if ratio < 80:
+                if ratio < 90:
                     continue
                 print(f"[ms] {ms_product[0]}\t-\t[wc] {wc_product[0]}")
                 command = self.__input_command()
+                if command == "q":
+                    return
                 if command == "s":
                     continue
                 if command == "ms":
@@ -95,9 +98,8 @@ class ProductsSyncro:
     @staticmethod
     def __input_command():
         while True:
-            command = input("? [s] - skip, [ms] - from moy_sklad, [wc] - from site: ")
-            if command in ["s", "ms", "wc"]:
-                print(command)
+            command = input("? [q] - quit [s] - skip, [ms] - from moy_sklad, [wc] - from site: ")
+            if command in ["q", "s", "ms", "wc"]:
                 return command
             else:
                 print("Wrong input")
