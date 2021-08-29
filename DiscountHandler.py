@@ -1,6 +1,7 @@
 
 from typing import Union
-from MSApi.MSApi import MSApi, PriceType, Product, SpecialPriceDiscount
+from MSApi.MSApi import MSApi, PriceType, Product, Service, Bundle, Variant, SpecialPriceDiscount
+from MSApi.Assortment import Assortment
 from MSApi.CompanySettings import DiscountStrategy
 
 
@@ -22,20 +23,20 @@ class DiscountHandler:
     def get_default_price_type(self) -> PriceType:
         return self.__default_price_type
 
-    def get_default_price_value(self, product: Product):
-        for sale_price in product.gen_sale_prices():
+    def get_default_price_value(self, assort: Assortment):
+        for sale_price in assort.gen_sale_prices():
             if sale_price.get_price_type() == self.__default_price_type:
                 return sale_price.get_value()
         else:
-            raise DiscountHandlerException(f"Default price type in {product} not found")
+            raise DiscountHandlerException(f"Default price type in {assort.get_name()} not found")
 
-    def get_actual_price(self, product: Product, counterparty_group_tag: str) -> float:
+    def get_actual_price(self, assort: Union[Product, Service, Bundle, Variant], counterparty_group_tag: str) -> float:
         max_discount_percent: float = 0
         discount_price_types: [PriceType] = []
 
         for discount in self.__active_discounts:
             if self.__is_discount_included_agent_group(discount, counterparty_group_tag) \
-                    and self.__is_discount_included_product(discount, product):
+                    and self.__is_discount_included_assort(discount, assort):
                 if discount.is_use_price_type():
                     # TODO обработка параметра value
                     price_type = discount.get_special_price().get_price_type()
@@ -46,9 +47,9 @@ class DiscountHandler:
                     if disc_percent > max_discount_percent:
                         max_discount_percent = disc_percent
 
-        min_price = current_price = self.get_default_price_value(product)
+        min_price = current_price = self.get_default_price_value(assort)
 
-        for sale_price in product.gen_sale_prices():
+        for sale_price in assort.gen_sale_prices():
             value = sale_price.get_value()
             if sale_price.get_price_type() in discount_price_types:
                 if min_price > value:
@@ -65,18 +66,27 @@ class DiscountHandler:
         return discount.is_all_agents() or (agent_group in discount.gen_agent_tags())
 
     @staticmethod
-    def __is_discount_included_product(discount: SpecialPriceDiscount, product: Product) -> bool:
+    def __is_discount_included_assort(discount: SpecialPriceDiscount,
+                                      assort: Union[Product, Service, Bundle, Variant]) -> bool:
         if discount.is_all_products():
             return True
         for obj_meta in discount.gen_assortment():
             obj = MSApi.get_object_by_meta(obj_meta)
-            if type(obj) is not Product:
+            if issubclass(type(obj), Assortment):
                 continue
             else:
-                if obj == product:
+                if obj == assort:
                     return True
-        for productfolder in discount.gen_productfolders():
-            if productfolder == product.get_productfolder():
+
+        if hasattr(type(assort), 'get_productfolder'):
+            productfolder = assort.get_productfolder()
+        elif hasattr(type(assort), 'get_product'):
+            product = assort.get_product()
+            productfolder = product.get_productfolder()
+        else:
+            raise DiscountHandlerException(f"Unexpected type {type(assort)}")
+        for disc_folder in discount.gen_productfolders():
+            if productfolder == disc_folder:
                 return True
         return False
 

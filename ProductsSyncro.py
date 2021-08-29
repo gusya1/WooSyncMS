@@ -1,9 +1,7 @@
 import configparser
-
 from typing import Union
-
 from woocommerce import API
-from MSApi.MSApi import MSApi, MSApiException, MSApiHttpException, Filter, Product, PriceType
+from MSApi.MSApi import MSApi, MSApiException, MSApiHttpException, Filter, Product, Service, Bundle, Variant
 from requests.exceptions import RequestException, ConnectTimeout
 from DiscountHandler import DiscountHandler
 
@@ -26,10 +24,6 @@ class SyncReport:
     def __str__(self):
         result = "\n\n".join(self.__group_to_str(group) for group in self.__report_groups.values())
         return result
-            # "Unsyncronized WooCommerce products: \n{0}\n\nChanged products:\n{1}\n\nErrors:\n{2}".format(
-            # '\n\t'.join(name.get('name') for name in self.unsynchronized_wc_products),
-            # '\n'.join(('\n\t'.join(message.split('\n'))) for message in self.changed_products),
-            # '\n\t'.join(self.errors))
 
     @staticmethod
     def __group_to_str(group: (str, [str])) -> str:
@@ -77,19 +71,19 @@ class ProductsSyncro:
         self.report.add_report_group('duples', "WooCommerce products duplicates")
         ignore_ids = []
         for wc_product_1 in self.__wc_products:
-            wooms_id_1 = self.__get_wooms_id(wc_product_1)
+            wooms_href_1 = self.__get_wooms_href(wc_product_1)
+            if wooms_href_1 is None:
+                continue
             wc_product_id_1 = wc_product_1.get('id')
             if wc_product_id_1 in ignore_ids:
-                continue
-            if wooms_id_1 is None:
                 continue
             duplicates = []
             for wc_product_2 in self.__wc_products:
                 wc_product_id_2 = wc_product_2.get('id')
                 if wc_product_id_1 == wc_product_id_2:
                     continue
-                wooms_id_2 = self.__get_wooms_id(wc_product_2)
-                if wooms_id_1 == wooms_id_2:
+                wooms_href_2 = self.__get_wooms_href(wc_product_2)
+                if wooms_href_1 == wooms_href_2:
                     duplicates.append(f"{wc_product_2.get('name')} ({wc_product_id_2})")
                     ignore_ids.append(wc_product_id_2)
             if duplicates:
@@ -104,46 +98,55 @@ class ProductsSyncro:
             self.report.add_report_group('changes', "Changed products")
             self.report.add_report_group('errors', "Errors")
             for wc_product in self.__wc_products:
-                wooms_id = self.__get_wooms_id(wc_product)
-                if wooms_id is None:
+                wooms_href = self.__get_wooms_href(wc_product)
+                if wooms_href is None:
                     self.report.append_report('unsync', wc_product.get('name'))
                     continue
                 try:
-                    ms_product = MSApi.get_product_by_id(wooms_id)
-                    ms_regular_price = self.discount_handler.get_default_price_value(ms_product)
-                    ms_sale_price = self.discount_handler.get_actual_price(ms_product, self.__sale_group_tag)
                     wc_regular_price, wc_sale_price = self.__get_wc_prices(wc_product)
-
                     change_wc_product_report = []
                     wc_put_data = {}
-                    if ms_regular_price != wc_regular_price:
-                        wc_put_data['regular_price'] = str(ms_regular_price)
-                        change_wc_product_report.append(
-                            f"\tRegular price changed from {wc_regular_price} to {ms_regular_price}")
 
-                    if ms_sale_price == ms_regular_price:
-                        ms_sale_price = None
+                    ms_object = MSApi.get_object_by_href(wooms_href)
+                    if type(ms_object) in [Product, Service, Bundle]:
+                        if type(ms_object) == Product:
+                            if ms_object.get_variants_count() != 0:
+                                wc_put_data['meta_data'] = {
+                                        'key': 'wooms_variants',
+                                        'value': ''
+                                    }
+                        ms_regular_price = self.discount_handler.get_default_price_value(ms_object)
+                        ms_sale_price = self.discount_handler.get_actual_price(ms_object, self.__sale_group_tag)
+                        if ms_regular_price != wc_regular_price:
+                            wc_put_data['regular_price'] = str(ms_regular_price)
+                            change_wc_product_report.append(
+                                f"\tRegular price changed from {wc_regular_price} to {ms_regular_price}")
 
-                    if ms_sale_price != wc_sale_price:
-                        if ms_sale_price is None:
-                            wc_put_data['sale_price'] = ''
-                        else:
-                            wc_put_data['sale_price'] = str(ms_sale_price)
-                        change_wc_product_report.append(
-                            f"\tSale price changed from {wc_sale_price} to {ms_sale_price}")
+                        if ms_sale_price == ms_regular_price:
+                            ms_sale_price = None
 
-                    ms_name = ms_product.get_name()
-                    wc_name = wc_product.get('name')
-                    if ms_name != wc_name:
-                        wc_put_data['name'] = ms_product.get_name()
-                        change_wc_product_report.append(
-                            f"\tName changed from \"{wc_name}\" to \"{ms_name}\"")
-                    #
-                    # if wc_put_data:
-                    #     response = self.wcapi.put(f'products/{wc_product.get("id")}', data=wc_put_data)
-                    #     if response.status_code != 200:
-                    #         raise SyncroException(response.json())
+                        if ms_sale_price != wc_sale_price:
+                            if ms_sale_price is None:
+                                wc_put_data['sale_price'] = ''
+                            else:
+                                wc_put_data['sale_price'] = str(ms_sale_price)
+                            change_wc_product_report.append(
+                                f"\tSale price changed from {wc_sale_price} to {ms_sale_price}")
 
+                        ms_name = ms_object.get_name()
+                        wc_name = wc_product.get('name')
+                        if ms_name != wc_name:
+                            wc_put_data['name'] = ms_name
+                            change_wc_product_report.append(
+                                f"\tName changed from \"{wc_name}\" to \"{ms_name}\"")
+                    elif type(ms_object) == Variant:
+                        pass
+                    else:
+                        raise SyncroException("Unexpected object type")
+                # if wc_put_data:
+                #     response = self.wcapi.put(f'products/{wc_product.get("id")}', data=wc_put_data)
+                #     if response.status_code != 200:
+                #         raise SyncroException(response.json())
                 except MSApiHttpException as e:
                     self.report.append_report('errors', str(e))
                 except SyncroException as e:
@@ -153,28 +156,51 @@ class ProductsSyncro:
                 else:
                     if change_wc_product_report:
                         self.report.append_report('changes', "Product \"{0}\" changed:\n{1}".format(
-                            ms_product.get_name(),
+                            ms_object.get_name(),
                             '\n'.join(change_wc_product_report)))
         except ConnectTimeout as e:
             self.report.append_report('errors', str(e))
 
-    def create_new_wc_products(self):
-        wooms_ids = []
+    def create_new_products(self):
+        pass
+        # sync_wc_products = []
+        # for wc_product in self.__wc_products:
+        # for ms_assort in MSApi.gen_assortment():
+        #     pass
+
+    def change_wooms_id_to_href(self):
         for wc_product in self.__wc_products:
-            wooms_id = self.__get_wooms_id(wc_product)
-            if wooms_id is None:
-                continue
-            wooms_ids.append(wooms_id)
+            new_wc_meta_list = []
+            wc_meta_list: [] = wc_product.get('meta_data')
+            has_sync = False
+            for meta_data in wc_meta_list:
+                if meta_data.get('key') == "wooms_id":
+                    ms_product = MSApi.get_product_by_id(meta_data.get('value'))
+                    new_wc_meta_list.append({
+                        'key': 'wooms_href',
+                        'value': ms_product.get_meta().get_href()
+                    })
+                    new_wc_meta_list.append({
+                        'key': 'wooms_id',
+                        'value': None
+                    })
+                    has_sync = True
+                else:
+                    new_wc_meta_list.append(meta_data)
+            if has_sync:
+                response = self.wcapi.put(f'products/{wc_product.get("id")}',
+                                          data={'meta_data': new_wc_meta_list})
+                if response.status_code != 200:
+                    raise SyncroException(response.json())
 
-        productfolder_filter = Filter()
-        for productfolder_id in self.__productfolder_ids_blacklist:
-            productfolder_filter += Filter.ne('productFolder', productfolder_id)
-
-        for ms_product in MSApi.gen_products(filters=productfolder_filter):
-            if ms_product.get_id() in wooms_ids:
-                continue
-            print(ms_product)
-
+        # productfolder_filter = Filter()
+        # for productfolder_id in self.__productfolder_ids_blacklist:
+        #     productfolder_filter += Filter.ne('productFolder', productfolder_id)
+        #
+        # for ms_product in MSApi.gen_products(filters=productfolder_filter):
+        #     if ms_product.get_id() in wooms_ids:
+        #         continue
+        #     print(ms_product)
 
     @staticmethod
     def __get_wc_prices(wc_product):
@@ -194,9 +220,9 @@ class ProductsSyncro:
     def force_set_meta_by_name(self):
         for wc_product in self.__gen_all_wc_products():
             wc_name = wc_product.get('name')
-            ms_id = self.__get_wooms_id(wc_product)
-            if ms_id is not None:
-                print(f"{wc_name}\t{ms_id}")
+            ms_href = self.__get_wooms_href(wc_product)
+            if ms_href is not None:
+                print(f"{wc_name}\t{ms_href}")
             else:
                 ms_products = list(MSApi.gen_products(filters=Filter.eq('name', wc_name)))
                 if len(ms_products) == 1:
@@ -207,9 +233,9 @@ class ProductsSyncro:
                     })
                     response = self.wcapi.put(f'products/{wc_product.get("id")}',
                                               data={'meta_data': wc_meta_list})
-                    print(f"{wc_name}\tsuccess")
                     if response.status_code != 200:
                         raise Exception(response.json())
+                    print(f"{wc_name}\tsuccess")
                 elif len(ms_products) > 1:
                     print(f"{wc_name}\tmore one")
                 else:
@@ -225,7 +251,7 @@ class ProductsSyncro:
         print("Loading WC products...")
         wc_products = []
         for wc_product in self.__gen_all_wc_products():
-            if self.__get_wooms_id(wc_product) is None:
+            if self.__get_wooms_href(wc_product) is None:
                 wc_products.append((wc_product.get('name'), wc_product.get('id')))
         for wc_product in wc_products:
             for ms_product in ms_products:
@@ -307,10 +333,10 @@ class ProductsSyncro:
             page_iterator += 1
 
     @staticmethod
-    def __get_wooms_id(wc_product):
+    def __get_wooms_href(wc_product):
         wc_meta_list = wc_product.get('meta_data')
         for wc_meta in wc_meta_list:
-            if wc_meta.get('key') != 'wooms_id':
+            if wc_meta.get('key') != 'wooms_href':
                 continue
             return wc_meta.get('value')
         else:

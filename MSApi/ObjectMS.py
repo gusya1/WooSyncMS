@@ -5,8 +5,6 @@ from MSApi.Meta import Meta
 
 class ObjectMS(SubObjectMS):
 
-    _objects_dict = {}
-
     def __init__(self, json):
         super().__init__(json)
         # if len(self.get_json()) == 1:

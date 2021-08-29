@@ -10,6 +10,8 @@ from MSApi.Discount import Discount, SpecialPriceDiscount, AccumulationDiscount
 from MSApi.PriceType import PriceType
 from MSApi.CompanySettings import CompanySettings
 from MSApi.properties import Filter, Search
+from MSApi.Bundle import Bundle
+from MSApi.Variant import Variant
 
 
 class MSApiException(Exception):
@@ -40,7 +42,9 @@ class MSApi:
         'specialpricediscount': SpecialPriceDiscount,
         'accumulationdiscount': AccumulationDiscount,
         'service': Service,
-        'companysettings': CompanySettings
+        'companysettings': CompanySettings,
+        'bundle': Bundle,
+        'variant': Variant
     }
 
     def __init__(self):
@@ -58,14 +62,14 @@ class MSApi:
     @classmethod
     def get_company_settings(cls) -> CompanySettings:
         """Запрос на получение Настроек компании."""
-        response = cls.__auch_get('context/companysettings')
+        response = cls.auch_get('context/companysettings')
         cls.__error_handler(response)
         return CompanySettings(response.json())
 
     @classmethod
     def get_default_price_type(cls) -> PriceType:
         """Получить тип цены по умолчанию"""
-        response = cls.__auch_get('context/companysettings/pricetype/default')
+        response = cls.auch_get('context/companysettings/pricetype/default')
         cls.__error_handler(response)
         return PriceType(response.json())
 
@@ -79,57 +83,78 @@ class MSApi:
         return obj_type(response.json())
 
     @classmethod
+    def get_object_by_json(cls, json_data):
+        meta = Meta(json_data.get('meta'))
+        obj_type = cls.__objects_dict.get(meta.get_type())
+        if obj_type is None:
+            raise MSApiException(f"Unknown object type \"{meta.get_type()}\"")
+        return obj_type(json_data)
+
+    @classmethod
+    def get_object_by_href(cls, href):
+        response = cls.__auch_get_by_href(href)
+        cls.__error_handler(response)
+        return cls.get_object_by_json(response.json())
+
+    @classmethod
     def gen_organizations(cls, **kwargs):
-        response = cls.__auch_get('entity/organization', **kwargs)
+        response = cls.auch_get('entity/organization', **kwargs)
         cls.__error_handler(response)
         for row in response.json().get('rows'):
             yield Organization(row)
 
     @classmethod
+    def gen_assortment(cls, **kwargs):
+        response = cls.auch_get('entity/assortment', **kwargs)
+        cls.__error_handler(response)
+        for row in response.json().get('rows'):
+            yield cls.get_object_by_json(row)
+
+    @classmethod
     def gen_customtemplates(cls, **kwargs):
-        response = cls.__auch_get('entity/assortment/metadata/customtemplate', **kwargs)
+        response = cls.auch_get('entity/assortment/metadata/customtemplate', **kwargs)
         cls.__error_handler(response)
         for row in response.json().get('rows'):
             yield Template(row)
 
     @classmethod
     def gen_products(cls, **kwargs):
-        response = cls.__auch_get('entity/product', **kwargs)
+        response = cls.auch_get('entity/product', **kwargs)
         cls.__error_handler(response)
         for row in response.json().get('rows'):
             yield Product(row)
 
     @classmethod
     def gen_productfolders(cls, **kwargs):
-        response = cls.__auch_get('entity/productfolder', **kwargs)
+        response = cls.auch_get('entity/productfolder', **kwargs)
         cls.__error_handler(response)
         for row in response.json().get('rows'):
             yield ProductFolder(row)
 
     @classmethod
     def gen_discounts(cls, **kwargs):
-        response = cls.__auch_get('entity/discount', **kwargs)
+        response = cls.auch_get('entity/discount', **kwargs)
         cls.__error_handler(response)
         for row in response.json().get('rows'):
             yield Discount(row)
 
     @classmethod
     def gen_special_price_discounts(cls, **kwargs):
-        response = cls.__auch_get('entity/specialpricediscount', **kwargs)
+        response = cls.auch_get('entity/specialpricediscount', **kwargs)
         cls.__error_handler(response)
         for row in response.json().get('rows'):
             yield SpecialPriceDiscount(row)
 
     @classmethod
     def gen_accumulation_discounts(cls, **kwargs):
-        response = cls.__auch_get('entity/accumulationdiscount', **kwargs)
+        response = cls.auch_get('entity/accumulationdiscount', **kwargs)
         cls.__error_handler(response)
         for row in response.json().get('rows'):
             yield SpecialPriceDiscount(row)
 
     @classmethod
     def get_product_by_id(cls, product_id, **kwargs):
-        response = cls.__auch_get(f'entity/product/{product_id}', **kwargs)
+        response = cls.auch_get(f'entity/product/{product_id}', **kwargs)
         cls.__error_handler(response)
         return Product(response.json())
 
@@ -179,7 +204,7 @@ class MSApi:
                              **kwargs)
 
     @classmethod
-    def __auch_get(cls, request, **kwargs):
+    def auch_get(cls, request, **kwargs):
         return cls.__auch_get_by_href(f"{cls.__endpoint}/{request}", **kwargs)
 
     @classmethod
