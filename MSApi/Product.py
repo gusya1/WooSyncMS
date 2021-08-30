@@ -24,3 +24,9 @@ class Product(Assortment):
 
     def get_variants_count(self) -> int:
         return int(self._json.get('variantsCount'))
+
+    def get_article(self) -> Optional[str]:
+        return self._json.get('article')
+
+    def has_variants(self) -> bool:
+        return self.get_variants_count() > 1

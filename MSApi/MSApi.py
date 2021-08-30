@@ -9,7 +9,7 @@ from MSApi.ProductFolder import ProductFolder
 from MSApi.Discount import Discount, SpecialPriceDiscount, AccumulationDiscount
 from MSApi.PriceType import PriceType
 from MSApi.CompanySettings import CompanySettings
-from MSApi.properties import Filter, Search
+from MSApi.properties import Filter, Search, Expand
 from MSApi.Bundle import Bundle
 from MSApi.Variant import Variant
 
@@ -49,6 +49,10 @@ class MSApi:
 
     def __init__(self):
         pass
+
+    @classmethod
+    def get_endpoint(cls):
+        return cls.__endpoint
 
     @classmethod
     def login(cls, login: str, password: str):
@@ -102,6 +106,27 @@ class MSApi:
         cls.__error_handler(response)
         for row in response.json().get('rows'):
             yield Organization(row)
+
+    @classmethod
+    def gen_variants(cls, **kwargs):
+        response = cls.auch_get('entity/variant', **kwargs)
+        cls.__error_handler(response)
+        for row in response.json().get('rows'):
+            yield Variant(row)
+
+    @classmethod
+    def gen_services(cls, **kwargs):
+        response = cls.auch_get('entity/service', **kwargs)
+        cls.__error_handler(response)
+        for row in response.json().get('rows'):
+            yield Service(row)
+
+    @classmethod
+    def gen_bundles(cls, **kwargs):
+        response = cls.auch_get('entity/bundle', **kwargs)
+        cls.__error_handler(response)
+        for row in response.json().get('rows'):
+            yield Bundle(row)
 
     @classmethod
     def gen_assortment(cls, **kwargs):
@@ -208,12 +233,14 @@ class MSApi:
         return cls.__auch_get_by_href(f"{cls.__endpoint}/{request}", **kwargs)
 
     @classmethod
-    def __auch_get_by_href(cls, request, search: Search = None, filters: Filter = None, **kwargs):
+    def __auch_get_by_href(cls, request, search: Search = None, filters: Filter = None, expand: Expand = None,  **kwargs):
         params = []
         if search is not None:
             params.append(str(search))
         if filters is not None:
             params.append(str(filters))
+        if expand is not None:
+            params.append(str(expand))
         params_str = ""
         if params:
             params_str = f"?{'&'.join(params)}"
