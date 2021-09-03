@@ -2,41 +2,56 @@
 from typing import Union
 from MSApi.MSApi import MSApi, PriceType, Product, Service, Bundle, Variant, SpecialPriceDiscount
 from MSApi.Assortment import Assortment
-from MSApi.CompanySettings import DiscountStrategy
-
 
 class DiscountHandlerException(Exception):
     pass
 
 
-class DiscountHandler:
+def check_init(f):
+    def wrapper(*args):
+        if not args[0].is_init:
+            args[0].init()
+        return f(*args)
+    return wrapper
 
-    def __init__(self):
-        self.__active_discounts: [SpecialPriceDiscount] = []
+
+class DiscountHandler:
+    __active_discounts: [SpecialPriceDiscount] = []
+    __default_price_type: PriceType = None
+    is_init = False
+
+    @classmethod
+    def init(cls):
         for discount in MSApi.gen_special_price_discounts():
             if not discount.is_active():
                 continue
-            self.__active_discounts.append(discount)
+            cls.__active_discounts.append(discount)
+        cls.__default_price_type = MSApi.get_default_price_type()
+        cls.is_init = True
 
-        self.__default_price_type = MSApi.get_default_price_type()
+    @classmethod
+    @check_init
+    def get_default_price_type(cls) -> PriceType:
+        return cls.__default_price_type
 
-    def get_default_price_type(self) -> PriceType:
-        return self.__default_price_type
-
-    def get_default_price_value(self, assort: Assortment):
+    @classmethod
+    @check_init
+    def get_default_price_value(cls, assort: Assortment):
         for sale_price in assort.gen_sale_prices():
-            if sale_price.get_price_type() == self.__default_price_type:
+            if sale_price.get_price_type() == cls.__default_price_type:
                 return sale_price.get_value()
         else:
             raise DiscountHandlerException(f"Default price type in {assort.get_name()} not found")
 
-    def get_actual_price(self, assort: Union[Product, Service, Bundle, Variant], counterparty_group_tag: str) -> float:
+    @classmethod
+    @check_init
+    def get_actual_price(cls, assort: Union[Product, Service, Bundle, Variant], counterparty_group_tag: str) -> float:
         max_discount_percent: float = 0
         discount_price_types: [PriceType] = []
 
-        for discount in self.__active_discounts:
-            if self.__is_discount_included_agent_group(discount, counterparty_group_tag) \
-                    and self.__is_discount_included_assort(discount, assort):
+        for discount in cls.__active_discounts:
+            if cls.__is_discount_included_agent_group(discount, counterparty_group_tag) \
+                    and cls.__is_discount_included_assort(discount, assort):
                 if discount.is_use_price_type():
                     # TODO обработка параметра value
                     price_type = discount.get_special_price().get_price_type()
@@ -47,7 +62,7 @@ class DiscountHandler:
                     if disc_percent > max_discount_percent:
                         max_discount_percent = disc_percent
 
-        min_price = current_price = self.get_default_price_value(assort)
+        min_price = current_price = cls.get_default_price_value(assort)
 
         for sale_price in assort.gen_sale_prices():
             value = sale_price.get_value()
@@ -89,7 +104,4 @@ class DiscountHandler:
             if productfolder == disc_folder:
                 return True
         return False
-
-
-
 

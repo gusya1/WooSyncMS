@@ -1,4 +1,5 @@
 from MSApi.ObjectMS import ObjectMS
+from MSApi.ObjectMS import check_init
 
 
 class Template(ObjectMS):

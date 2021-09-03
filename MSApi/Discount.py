@@ -4,6 +4,7 @@ from MSApi.ObjectMS import ObjectMS, SubObjectMS
 from MSApi.ProductFolder import ProductFolder
 from MSApi.PriceType import PriceType
 from MSApi.Meta import Meta
+from MSApi.ObjectMS import check_init
 
 
 class SpecialPrice(SubObjectMS):

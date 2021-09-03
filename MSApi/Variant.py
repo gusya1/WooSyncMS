@@ -5,6 +5,7 @@ from MSApi.Assortment import Assortment
 from MSApi.Product import Product
 from MSApi.PriceType import PriceType
 from MSApi.ProductFolder import ProductFolder
+from MSApi.ObjectMS import check_init
 
 
 class Characteristic(ObjectMS):

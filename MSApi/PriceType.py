@@ -1,5 +1,6 @@
 from MSApi.ObjectMS import ObjectMS
 from typing import Optional
+from MSApi.ObjectMS import check_init
 
 
 class PriceType(ObjectMS):

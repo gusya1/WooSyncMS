@@ -1,14 +1,20 @@
 from MSApi.SubObjectMS import SubObjectMS
 from MSApi.Meta import Meta
-# from MSApi.MSApi import MSApi
+from MSApi.MSLowApi import MSLowApi
+
+
+def check_init(method):
+    def wrapper(*args, **kwargs):
+        if len(args[0].get_json()) == 1:
+            args[0].set_json(MSLowApi.get_json_by_href(args[0].get_meta().get_href()))
+        return method(*args, **kwargs)
+    return wrapper
 
 
 class ObjectMS(SubObjectMS):
 
     def __init__(self, json):
         super().__init__(json)
-        # if len(self.get_json()) == 1:
-        #     self._json = MSApi.get_object_by_meta(self.get_meta())
 
     def __eq__(self, other):
         return self.get_meta() == other.get_meta()
@@ -18,3 +24,6 @@ class ObjectMS(SubObjectMS):
 
     def get_json(self):
         return self._json
+
+    def set_json(self, json):
+        self._json = json.copy()

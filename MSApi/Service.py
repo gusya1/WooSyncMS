@@ -2,6 +2,7 @@ from typing import Optional
 
 from MSApi.Assortment import Assortment
 from MSApi.ProductFolder import ProductFolder
+from MSApi.ObjectMS import check_init
 
 
 class Service(Assortment):
