@@ -123,7 +123,7 @@ class ProductsSyncro:
                 else:
                     wc_put_data['type'] = "simple"
 
-                wc_put_data |= self.__get_wc_put_data_prices(ms_product)
+                wc_put_data.update(self.__get_wc_put_data_prices(ms_product))
 
                 wc_json = WcApi.post('products', data=wc_put_data)
                 response = MSApi.auch_put(
@@ -183,17 +183,17 @@ class ProductsSyncro:
                     wc_type = wc_product.get('type')
                     if wc_product.get('type') == 'variable':
                         if not ms_product.has_variants():
-                            raise SyncroException("Change variant product to simple is not implemented now") # TODO change to simple
-                        raise SyncroException("Unsupported product type: {}".format(wc_type)) # TODO sync variant
+                            raise SyncroException("[{}] Change variant product to simple is not implemented now".format(wc_id)) # TODO change to simple
+                        raise SyncroException("[{}] Unsupported product type: {}".format(wc_id, wc_type)) # TODO sync variant
                     elif wc_type != 'simple':
-                        raise SyncroException("Unsupported product type: {}".format(wc_type))
+                        raise SyncroException("[{}] Unsupported product type: {}".format(wc_id, wc_type))
                     elif ms_product.has_variants():
-                        raise SyncroException("Change simple product to variant is not implemented now") # TODO change to variant
+                        raise SyncroException("[{}] Change simple product to variant is not implemented now".format(wc_id)) # TODO change to variant
 
                     wc_put_data = {}
 
-                    wc_put_data |= self.__sync_name(ms_product, wc_product)
-                    wc_put_data |= self.__sync_prices(ms_product, wc_product)
+                    wc_put_data.update(self.__sync_name(ms_product, wc_product))
+                    wc_put_data.update(self.__sync_prices(ms_product, wc_product))
 
                     if wc_put_data:
                         WcApi.put(f'products/{wc_product.get("id")}', data=wc_put_data)
@@ -263,121 +263,3 @@ class ProductsSyncro:
             else:
                 wc_put_data['sale_price'] = str(ms_sale_price)
         return wc_put_data
-
-    def change_wooms_id_to_href(self):
-        for wc_product in WcApi.gen_all_wc_products(cached=True):
-            new_wc_meta_list = []
-            wc_meta_list: [] = wc_product.get('meta_data')
-            has_sync = False
-            for meta_data in wc_meta_list:
-                if meta_data.get('key') == "wooms_id":
-                    ms_product = MSApi.get_product_by_id(meta_data.get('value'))
-                    new_wc_meta_list.append({
-                        'key': 'wooms_href',
-                        'value': ms_product.get_meta().get_href()
-                    })
-                    new_wc_meta_list.append({
-                        'key': 'wooms_id',
-                        'value': None
-                    })
-                    has_sync = True
-                else:
-                    new_wc_meta_list.append(meta_data)
-            if has_sync:
-                WcApi.put(f'products/{wc_product.get("id")}', data={'meta_data': new_wc_meta_list})
-
-    def __get_wc_put_data_prices(self, ms_object, wc_regular_price=None, wc_sale_price=None):
-        """генерирует данные о ценах для Woocommerce на основе цен из моего склада"""
-        wc_put_data = {}
-        ms_regular_price = DiscountHandler.get_default_price_value(ms_object)
-        ms_sale_price = DiscountHandler.get_actual_price(ms_object, self.__sale_group_tag)
-        if ms_regular_price != wc_regular_price:
-            wc_put_data['regular_price'] = str(ms_regular_price)
-
-        if ms_sale_price == ms_regular_price:
-            ms_sale_price = None
-
-        if ms_sale_price != wc_sale_price:
-            if ms_sale_price is None:
-                wc_put_data['sale_price'] = ''
-            else:
-                wc_put_data['sale_price'] = str(ms_sale_price)
-        return wc_put_data
-
-
-    def force_set_meta_by_name(self):
-        for wc_product in WcApi.gen_all_wc_products(cached=True):
-            wc_name = wc_product.get('name')
-            ms_href = get_wooms_href(wc_product)
-            if ms_href is not None:
-                print(f"{wc_name}\t{ms_href}")
-            else:
-                ms_products = list(MSApi.gen_products(filters=Filter.eq('name', wc_name)))
-                if len(ms_products) == 1:
-                    wc_meta_list = wc_product.get('meta_data')
-                    wc_meta_list.append({
-                        'key': 'wooms_id',
-                        'value': ms_products[0].get_id()
-                    })
-                    WcApi.put(f'products/{wc_product.get("id")}', data={'meta_data': wc_meta_list})
-                    print(f"{wc_name}\tsuccess")
-                elif len(ms_products) > 1:
-                    print(f"{wc_name}\tmore one")
-                else:
-                    print(f"{wc_name}\tfail")
-
-    def check_products_part_eq(self):
-        from fuzzywuzzy import fuzz
-        print("Loading MS products...")
-        ms_products = []
-        for ms_product in MSApi.gen_products():
-            ms_products.append((ms_product.get_name(), ms_product.get_meta()))
-
-        print("Loading WC products...")
-        wc_products = []
-        for wc_product in WcApi.gen_all_wc_products(cached=True):
-            if get_wooms_href(wc_product) is None:
-                wc_products.append((wc_product.get('name'), wc_product.get('id')))
-        for wc_product in wc_products:
-            for ms_product in ms_products:
-                ratio = fuzz.ratio(ms_product[0], wc_product[0])
-                if ratio < 80:
-                    continue
-                print(f"[ms] {ms_product[0]}\t-\t[wc] {wc_product[0]}")
-                command = self.__input_command()
-                if command == "q":
-                    return
-                if command == "s":
-                    continue
-                if command == "ms":
-                    WcApi.put(f'products/{wc_product[1]}',
-                              data={
-                                  'meta_data': [
-                                      {
-                                          'key': 'wooms_href',
-                                          'value': ms_product[1].get_href()
-                                      }
-                                  ]
-                              })
-                    print('Success!')
-                    break
-                if command == "wc":
-                    try:
-                        data = [{
-                            'meta': ms_product[1],
-                            'name': wc_product[0]
-                        }]
-                        MSApi.set_products(data)
-                        print('Success!')
-                    except MSApiException as e:
-                        print(e)
-                    break
-
-    @staticmethod
-    def __input_command():
-        while True:
-            command = input("? [q] - quit [s] - skip, [ms] - from moy_sklad, [wc] - from site: ")
-            if command in ["q", "s", "ms", "wc"]:
-                return command
-            else:
-                print("Wrong input")
