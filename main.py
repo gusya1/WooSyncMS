@@ -5,10 +5,11 @@ from ProductsSyncro import SyncroException
 # from DiscountHandler import DiscountHandler
 from Reporter import Reporter
 from MSApi.MSApi import MSApi
-from WcApi import WcApi, gen_all_wc_products
+from WcApi import WcApi
 
-from NewAssortmentCreator import NewAssortmentCreator
+from ProductsSyncro import ProductsSyncro
 from exceptions import *
+import logging
 
 
 def get_settings_list_parameter(parameter):
@@ -22,6 +23,9 @@ def get_settings_list_parameter(parameter):
 
 if __name__ == '__main__':
     try:
+        log_format = '[%(levelname)s] - %(message)s'
+        logging.basicConfig(level=logging.INFO, format=log_format)
+
         config = configparser.ConfigParser()
         config.read("settings.ini", encoding="utf-8")
 
@@ -29,22 +33,19 @@ if __name__ == '__main__':
             url=config['woocommerce']['url'],
             consumer_key=config['woocommerce']['consumer_key'],
             consumer_secret=config['woocommerce']['consumer_secret'])
-        WcApi.read_only_mode = True
+        WcApi.read_only_mode = False
 
-        MSApi.login(config['moy_sklad']['login'], config['moy_sklad']['password'])
+        MSApi.set_access_token(config['moy_sklad']['access_token'])
         sale_group_tag = config['moy_sklad']['group_tag']
 
-        wc_products = list(gen_all_wc_products())
+        # wc_products = list(WcApi.gen_all_wc_products())
 
-        assortment_creator = NewAssortmentCreator(wc_products, sale_group_tag)
-        assortment_creator.set_productfolder_ids_blacklist(
-            get_settings_list_parameter(config['moy_sklad']['groups_blacklist']))
-        assortment_creator.set_assortment_ids_blacklist(
-            get_settings_list_parameter(config['moy_sklad']['assortment_blacklist']))
-
-        assortment_creator.create_new_wc_products()
-
-        print(Reporter.to_str())
+        products_sync = ProductsSyncro(sale_group_tag)
+        products_sync.find_duplicate_wc_products()
+        products_sync.find_unsync_wc_products()
+        products_sync.create_new_characteristics()
+        products_sync.sync_products()
+        products_sync.create_new_products()
 
     except KeyError as e:
         print(e)

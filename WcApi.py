@@ -1,5 +1,6 @@
 from woocommerce import API
 from exceptions import WcApiException
+from MSApi import caching
 
 
 class WcApi:
@@ -41,6 +42,23 @@ class WcApi:
         if response.status_code not in [200, 201]:
             raise WcApiException(response.json().get('message'))
 
+    @classmethod
+    @caching
+    def gen_all_wc_products(cls, filters: {str: str} = None, **kwargs):
+        page_iterator = 1
+        filters_str = ""
+        if filters is not None:
+            for filter_parameter, filter_value in filters.items():
+                filters_str += f"&{filter_parameter}={filter_parameter}"
+
+        while True:
+            wc_product_list = cls.get(f'products?per_page=50&page={page_iterator}{filters_str}', **kwargs)
+            if len(wc_product_list) == 0:
+                break
+            for wc_product in wc_product_list:
+                yield wc_product
+            page_iterator += 1
+
 
 def gen_all_wc_variations(wc_product_id):
     page_iterator = 1
@@ -51,30 +69,6 @@ def gen_all_wc_variations(wc_product_id):
         for wc_product in wc_product_list:
             yield wc_product
         page_iterator += 1
-
-
-def gen_all_wc_products():
-    page_iterator = 1
-    while True:
-        wc_product_list = WcApi.get(f'products?per_page=50&page={page_iterator}')
-        if len(wc_product_list) == 0:
-            break
-        for wc_product in wc_product_list:
-            yield wc_product
-        page_iterator += 1
-
-
-def gen_all_wc_categories():
-    page_iterator = 1
-    while True:
-        response = WcApi.get(f'products/categories?per_page=50&page={page_iterator}')
-        wc_category_list = response.json()
-        if len(wc_category_list) == 0:
-            break
-        for wc_category in wc_category_list:
-            yield wc_category
-        page_iterator += 1
-
 
 def get_wooms_href(wc_product):
     wc_meta_list = wc_product.get('meta_data')

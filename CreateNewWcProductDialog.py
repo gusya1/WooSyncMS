@@ -1,7 +1,8 @@
 import configparser
 
 from MSApi.MSApi import MSApi, MSApiException
-from WcApi import WcApi, gen_all_wc_products
+from WcApi import WcApi
+
 
 from NewAssortmentCreator import NewAssortmentCreator
 from exceptions import *
@@ -21,12 +22,12 @@ if __name__ == '__main__':
             url=config['woocommerce']['url'],
             consumer_key=config['woocommerce']['consumer_key'],
             consumer_secret=config['woocommerce']['consumer_secret'])
-        # WcApi.read_only_mode = True
+        WcApi.read_only_mode = True
 
-        MSApi.login(config['moy_sklad']['login'], config['moy_sklad']['password'])
+        MSApi.set_access_token(config['moy_sklad']['access_token'])
         sale_group_tag = config['moy_sklad']['group_tag']
 
-        wc_products = list(gen_all_wc_products())
+        wc_products = list(WcApi.gen_all_wc_products())
         assortment_creator = NewAssortmentCreator(wc_products, sale_group_tag)
 
         while True:

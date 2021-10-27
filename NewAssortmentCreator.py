@@ -10,13 +10,6 @@ from typing import Union
 reporter = Reporter()
 
 
-# def except_discount_exception(f):
-#     try:
-#         f
-#     except DiscountHandlerException as e:
-#         reporter.append_report('errors', str(e))
-
-
 class NewAssortmentCreator:
 
     def __init__(self, wc_products: {}, sale_group_tag):
