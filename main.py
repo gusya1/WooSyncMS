@@ -1,4 +1,5 @@
 import configparser
+import os
 
 from ProductsSyncro import SyncroException
 
@@ -27,7 +28,7 @@ if __name__ == '__main__':
         logging.basicConfig(level=logging.INFO, format=log_format)
 
         config = configparser.ConfigParser()
-        config.read("settings.ini", encoding="utf-8")
+        config.read(os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.ini"), encoding="utf-8")
 
         WcApi.login(
             url=config['woocommerce']['url'],
