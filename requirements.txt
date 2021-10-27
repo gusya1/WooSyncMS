@@ -1,0 +1,3 @@
+MSApi==0.1.27
+WooCommerce==3.0.0
+requests==2.26.0
