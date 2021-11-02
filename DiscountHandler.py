@@ -3,6 +3,7 @@ from typing import Union
 from MSApi.MSApi import MSApi, PriceType, Product, Service, Bundle, Variant, SpecialPriceDiscount
 from MSApi.Assortment import Assortment
 
+
 class DiscountHandlerException(Exception):
     pass
 
@@ -87,7 +88,7 @@ class DiscountHandler:
             return True
         for obj_meta in discount.gen_assortment():
             obj = MSApi.get_object_by_meta(obj_meta)
-            if issubclass(type(obj), Assortment):
+            if not issubclass(type(obj), Assortment):
                 continue
             else:
                 if obj == assort:

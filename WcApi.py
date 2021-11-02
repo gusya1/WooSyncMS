@@ -44,20 +44,25 @@ class WcApi:
 
     @classmethod
     @caching
-    def gen_all_wc_products(cls, filters: {str: str} = None, **kwargs):
+    def gen_all_wc(cls, entity, filters: {str: str} = None, **kwargs):
         page_iterator = 1
         filters_str = ""
         if filters is not None:
             for filter_parameter, filter_value in filters.items():
-                filters_str += f"&{filter_parameter}={filter_parameter}"
+                filters_str += f"&{filter_parameter}={filter_value}"
 
         while True:
-            wc_product_list = cls.get(f'products?per_page=50&page={page_iterator}{filters_str}', **kwargs)
+            wc_product_list = cls.get(f'{entity}?per_page=50&page={page_iterator}{filters_str}', **kwargs)
             if len(wc_product_list) == 0:
                 break
             for wc_product in wc_product_list:
                 yield wc_product
             page_iterator += 1
+
+    @classmethod
+    @caching
+    def gen_all_wc_products(cls, **kwargs):
+        return cls.gen_all_wc(entity="products", **kwargs)
 
 
 def gen_all_wc_variations(wc_product_id):

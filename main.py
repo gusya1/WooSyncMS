@@ -8,6 +8,7 @@ from Reporter import Reporter
 from MSApi.MSApi import MSApi
 from WcApi import WcApi
 
+from CustomerOrderSyncro import CustomerOrderSyncro
 from ProductsSyncro import ProductsSyncro
 from exceptions import *
 import logging
@@ -39,14 +40,17 @@ if __name__ == '__main__':
         MSApi.set_access_token(config['moy_sklad']['access_token'])
         sale_group_tag = config['moy_sklad']['group_tag']
 
-        # wc_products = list(WcApi.gen_all_wc_products())
-
         products_sync = ProductsSyncro(sale_group_tag)
         products_sync.find_duplicate_wc_products()
         products_sync.find_unsync_wc_products()
         products_sync.create_new_characteristics()
         products_sync.sync_products()
         products_sync.create_new_products()
+
+        # order_sync = CustomerOrderSyncro('покупатель')
+        # order_sync.check_and_correct_ms_phone_numbers()
+        # order_sync.sync_orders()
+
 
     except KeyError as e:
         print(e)
