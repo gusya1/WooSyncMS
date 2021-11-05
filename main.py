@@ -2,10 +2,6 @@ import configparser
 import os
 import sys
 
-from ProductsSyncro import SyncroException
-
-# from DiscountHandler import DiscountHandler
-from Reporter import Reporter
 from MSApi.MSApi import MSApi
 from WcApi import WcApi
 
@@ -13,7 +9,6 @@ from CustomerOrderSyncro import CustomerOrderSyncro
 from ProductsSyncro import ProductsSyncro
 from exceptions import *
 import logging
-from geopy.geocoders import Nominatim
 
 
 def get_settings_list_parameter(parameter):
