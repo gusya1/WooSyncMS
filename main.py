@@ -1,5 +1,6 @@
 import configparser
 import os
+import sys
 
 from ProductsSyncro import SyncroException
 
@@ -12,6 +13,7 @@ from CustomerOrderSyncro import CustomerOrderSyncro
 from ProductsSyncro import ProductsSyncro
 from exceptions import *
 import logging
+from geopy.geocoders import Nominatim
 
 
 def get_settings_list_parameter(parameter):
@@ -40,17 +42,18 @@ if __name__ == '__main__':
         MSApi.set_access_token(config['moy_sklad']['access_token'])
         sale_group_tag = config['moy_sklad']['group_tag']
 
-        products_sync = ProductsSyncro(sale_group_tag)
-        products_sync.find_duplicate_wc_products()
-        products_sync.find_unsync_wc_products()
-        products_sync.create_new_characteristics()
-        products_sync.sync_products()
-        products_sync.create_new_products()
+        if (len(sys.argv) == 1) or ('--products' in sys.argv):
+            products_sync = ProductsSyncro(sale_group_tag)
+            products_sync.find_duplicate_wc_products()
+            products_sync.find_unsync_wc_products()
+            products_sync.create_new_characteristics()
+            products_sync.sync_products()
+            products_sync.create_new_products()
 
-        # order_sync = CustomerOrderSyncro('покупатель')
-        # order_sync.check_and_correct_ms_phone_numbers()
-        # order_sync.sync_orders()
-
+        if '--orders' in sys.argv:
+            order_sync = CustomerOrderSyncro(sale_group_tag)
+            order_sync.check_and_correct_ms_phone_numbers()
+            order_sync.sync_orders()
 
     except KeyError as e:
         print(e)
