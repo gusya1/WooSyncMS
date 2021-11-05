@@ -127,7 +127,7 @@ class CustomerOrderSyncro:
                     response = MSApi.auch_post("entity/customerorder", json=ms_post_order_data)
                     error_handler(response)
                     ms_order = CustomerOrder(response.json())
-                    logging.info('CustomerOrder {} created'.format(ms_order.get_name()))
+                    logging.info('WC Order [{}]: CustomerOrder {} created'.format(wc_order_id, ms_order.get_name()))
                     self.last_order_num += 1
                     wc_put_data = {
                         'status': 'completed'
@@ -160,13 +160,13 @@ class CustomerOrderSyncro:
                         'phone': ms_formatted_number
                     })
                     error_handler(response)
-                    logging.info("Phone number in \'{}\' counterparty format from \'{}\' to \'{}\'".format(
+                    logging.info("Counterparty \"{}\": phone format from \'{}\' to \'{}\'".format(
                         ms_cp.get_name(),
                         ms_cp_phone,
                         ms_formatted_number
                     ))
                 except phonenumbers.phonenumberutil.NumberParseException:
-                    logging.error(f"Invalid phone: {ms_cp_phone}")
+                    logging.error(f"Counterparty \"{ms_cp.get_name()}\": Invalid phone: {ms_cp_phone}")
                 except MSApiHttpException as e:
                     logging.error(str(e))
         except MSApiException as e:
@@ -222,7 +222,7 @@ class CustomerOrderSyncro:
     def __create_new_counterparty(self, wc_order):
         cp_name = self.__get_name_by_order(wc_order)
         ms_post_data = {
-            'name': "NEW {}".format(cp_name),
+            'name': "{}".format(cp_name),
             'phone': self.__get_format_phone_by_order(wc_order),
             'email': wc_order.get('billing').get('email'),
             'actualAddress': wc_order.get('billing').get('address_1'),
@@ -236,9 +236,9 @@ class CustomerOrderSyncro:
 
     def __get_name_by_order(self, wc_order):
         wc_billing = wc_order.get('billing')
-        return "{} {} {}".format(wc_billing.get('first_name'),
-                                 wc_billing.get('last_name'),
-                                 self.__get_format_phone_by_order(wc_order) or "")
+        return "NEW {} {} {}".format(wc_billing.get('first_name'),
+                                     wc_billing.get('last_name'),
+                                     self.__get_format_phone_by_order(wc_order) or "")
 
     @staticmethod
     def __get_format_phone_by_order(wc_order):
