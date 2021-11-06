@@ -3,7 +3,7 @@ from WcApi import WcApi
 import phonenumbers
 import logging
 
-from MSApi import Counterparty, MSApi, error_handler, MSApiException, MSApiHttpException, Filter, Organization
+from MSApi import Counterparty, MSApi, error_handler, MSApiException, MSApiHttpException, Filter, Organization, Service
 from MSApi import State, Project, Product, Order
 from MSApi.documents.CustomerOrder import CustomerOrder
 
@@ -17,6 +17,14 @@ states_dict = {
 projects_dict = {
     'С-Т': 'Пункт №1 ТУХАЧЕВСКОГО',
     'С-П': 'Пункт №2 ПУШКИН'
+}
+
+delivery_dict = {
+    "Зона №6 (красная зона)": "37d8cd7f-238c-11eb-0a80-046a0001273e",
+    "Зона №1 (зелёная зона)": "e4ca996c-238a-11eb-0a80-063300016fe1",
+    "Зона №2 (оранжевая зона)": "e4ca996c-238a-11eb-0a80-063300016fe1",
+    "Зона №3 (синяя зона)": "a91db949-5572-11eb-0a80-003a0005e730",
+    "Зона №4 (фиолетовая зона)": "71dbb4a1-9f5c-11ea-0a80-0404000afc45"
 }
 
 
@@ -47,6 +55,11 @@ class CustomerOrderSyncro:
             del projects_dict[project.get_name()]
         if len(projects_dict) != 0:
             raise RuntimeError("Projects \'{}\' not found".format(projects_dict.keys()))
+
+        self.delivery_dict = {}
+        for zone_name, service_id in delivery_dict.items():
+            service = Service.request_by_id(service_id)
+            self.delivery_dict[zone_name] = service
 
         for attr in Product.gen_attributes_list():
             if attr.get_name() == 'wc_id':
@@ -122,7 +135,17 @@ class CustomerOrderSyncro:
                     }
                     positions_post_data_list.append(ms_post_position)
 
+                for wc_shipping_line in wc_order['shipping_lines']:
+                    service = self.delivery_dict.get(wc_shipping_line['method_title'])
+                    if service is None:
+                        continue
+                    positions_post_data_list.append({
+                        'assortment': {'meta': service.get_meta().get_json()},
+                        'quantity': 1,
+                        'price': int(wc_shipping_line['total']) * 100
+                    })
                 ms_post_order_data['positions'] = positions_post_data_list
+
                 try:
                     response = MSApi.auch_post("entity/customerorder", json=ms_post_order_data)
                     error_handler(response)
