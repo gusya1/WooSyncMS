@@ -1,12 +1,11 @@
 
-from MSApi.MSApi import MSApi, MSApiException, MSApiHttpException, Product, Service, Bundle, Variant
+from MSApi.MSApi import MSApi, MSApiHttpException, Product, Variant
 from MSApi.MSLowApi import error_handler
-from MSApi.mixin import AttributeMixin
 from MSApi.properties import *
-from requests.exceptions import RequestException, ConnectTimeout
+
 from DiscountHandler import DiscountHandler, DiscountHandlerException
-from Reporter import Reporter
-from WcApi import WcApi, get_wooms_href
+
+from WcApi import WcApi
 from exceptions import SyncroException, WcApiException
 import logging
 
@@ -120,6 +119,7 @@ class ProductsSyncro:
 
                 if ms_product.has_variants():
                     wc_put_data['type'] = "variable"
+                    continue
                 else:
                     wc_put_data['type'] = "simple"
 

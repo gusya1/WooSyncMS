@@ -156,12 +156,12 @@ class CustomerOrderSyncro:
                         'status': 'completed'
                     }
                     WcApi.put('orders/{}'.format(wc_order['id']), data=wc_put_data)
-                except MSApiHttpException as e:
-                    raise RuntimeError('CustomerOrder create failed: {}'.format(str(e)))
                 except WcApiException as e:
                     logging.error('WC Order status change failed: {}'.format(str(e)))
             except RuntimeError as e:
                 logging.error("WC Order [{}]: Synchronize failed: {}".format(wc_order_id, str(e)))
+            except MSApiException as e:
+                logging.error("WC Order [{}]: MoySklad error: {}".format(wc_order_id, str(e)))
 
     @staticmethod
     def check_and_correct_ms_phone_numbers():

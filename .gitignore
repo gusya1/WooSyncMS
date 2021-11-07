@@ -1,0 +1,10 @@
+
+venv
+.idea
+data
+__pycache__
+dist
+
+sandbox.py
+settings.ini
+saves.json
