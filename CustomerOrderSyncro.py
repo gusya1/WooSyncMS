@@ -4,7 +4,7 @@ import phonenumbers
 import logging
 
 from MSApi import Counterparty, MSApi, error_handler, MSApiException, MSApiHttpException, Filter, Organization, Service
-from MSApi import State, Project, Product, Order
+from MSApi import State, Project, Product, Order, Store
 from MSApi.documents.CustomerOrder import CustomerOrder
 
 from exceptions import WcApiException
@@ -27,12 +27,20 @@ delivery_dict = {
     "Зона №4 (фиолетовая зона)": "71dbb4a1-9f5c-11ea-0a80-0404000afc45"
 }
 
+store_name = 'Основной склад'
+
 
 class CustomerOrderSyncro:
 
     def __init__(self, customer_tag):
         self.customer_tag = customer_tag
         self.organization: Organization = list(MSApi.gen_organizations())[0]  # TODO choose organization
+        for store in Store.gen_list():
+            if store.get_name() == store_name:
+                self.store: Store = store
+                break
+        else:
+            raise RuntimeError("Store \'{}\' not found".format(store_name))
 
         self.states_dict = {}
         for state in CustomerOrder.gen_states():
@@ -102,6 +110,7 @@ class CustomerOrderSyncro:
                     'externalCode': str(wc_order.get('id')),
                     'name': str(self.last_order_num + 1).zfill(5),
                     'organization': {'meta': self.organization.get_meta().get_json()},
+                    'store': {'meta': self.store.get_meta().get_json()},
                     'state': {'meta': state.get_meta().get_json()},
                     'agent': {'meta': ms_cp.get_meta().get_json()},
                     'attributes': [
@@ -122,7 +131,8 @@ class CustomerOrderSyncro:
                 positions_post_data_list = []
                 for wc_product in wc_order['line_items']:
                     wc_product_id = wc_product['product_id']
-                    ms_product_list = list(MSApi.gen_products(filters=Filter.eq(self.product_wc_id_href, wc_product_id)))
+                    ms_product_list = list(MSApi.gen_products(filters=Filter.eq(self.product_wc_id_href,
+                                                                                wc_product_id)))
                     if len(ms_product_list) == 0:
                         raise RuntimeError("Product [{}] not found in MoySklad".format(wc_product_id))
                     elif len(ms_product_list) != 1:
