@@ -1,5 +1,5 @@
 
-from MSApi.MSApi import MSApi, MSApiHttpException, Product, Variant
+from MSApi.MSApi import MSApi, MSApiHttpException, Product, Variant, Bundle
 from MSApi.MSLowApi import error_handler
 from MSApi.properties import *
 
@@ -42,43 +42,62 @@ class ProductsSyncro:
             if attr.get_name() == WC_ID_ATTR_NAME:
                 self.__wc_id_attribute = attr
 
+        # self.__bundle_import_flag_attribute = None
+        # self.__bundle_wc_id_attribute = None
+        # for attr in Bundle.gen_attributes_list():
+        #     if attr.get_name() == IMPORT_FLAG_ATTR_NAME:
+        #         self.__import_flag_attribute = attr
+        #     if attr.get_name() == WC_ID_ATTR_NAME:
+        #         self.__wc_id_attribute = attr
+
         if self.__import_flag_attribute is None:
             raise SyncroException("product attribute '{}' not found".format(IMPORT_FLAG_ATTR_NAME))
         if self.__wc_id_attribute is None:
             raise SyncroException("product attribute '{}' not found".format(WC_ID_ATTR_NAME))
 
     def find_duplicate_wc_products(self):
-        """ищет повторяющиеся продукты и пишет о них в лог"""
+        """
+        ищет повторяющиеся продукты и пишет о них в лог
+        """
+
         filters = Filter.eq(self.__import_flag_attribute.get_meta().get_href(), True)
         filters += Filter.exists(self.__wc_id_attribute.get_meta().get_href(), True)
 
-        duplicates = {}
-        for ms_assort_1 in MSApi.gen_products(filters=filters, cached=True):
-            wc_id_1 = ms_assort_1.get_attribute_by_name(WC_ID_ATTR_NAME).get_value()
-            if wc_id_1 is None:
+        dist_of_products = {}
+
+        for ms_product in MSApi.gen_products(filters=filters, cached=True):
+            wc_id = ms_product.get_attribute_by_name(WC_ID_ATTR_NAME).get_value()
+            if wc_id is None:
                 continue
 
-            for ms_assort_2 in MSApi.gen_products(filters=filters, cached=True):
-                if ms_assort_2.get_id() == ms_assort_1.get_id():
-                    continue
+            ms_id_list = dist_of_products.setdefault(wc_id, [])
+            if ms_product not in ms_id_list:
+                ms_id_list.append(ms_product)
 
-                wc_id_2 = ms_assort_2.get_attribute_by_name(WC_ID_ATTR_NAME).get_value()
-                if wc_id_2 is None:
-                    continue
+        for ms_bundle in Bundle.gen_list(cached=True):
+            ms_bundle: Bundle
+            # FIXME исправить на фильтр когда зафиксят баг
+            import_flag = ms_bundle.get_attribute_by_name(IMPORT_FLAG_ATTR_NAME)
+            if import_flag is None:
+                continue
+            if not import_flag.get_value():
+                continue
+            wc_id = ms_bundle.get_attribute_by_name(WC_ID_ATTR_NAME)
+            if wc_id is None:
+                continue
+            wc_id = wc_id.get_value()
+            if wc_id is None:
+                continue
 
-                if wc_id_1 == wc_id_2:
-                    if wc_id_1 not in duplicates:
-                        duplicates[wc_id_1] = [ms_assort_1, ms_assort_2]
-                    else:
-                        if ms_assort_1 not in duplicates[wc_id_1]:
-                            duplicates[wc_id_1].append(ms_assort_1)
-                        if ms_assort_2 not in duplicates[wc_id_1]:
-                            duplicates[wc_id_1].append(ms_assort_2)
+            ms_id_list = dist_of_products.setdefault(wc_id, [])
+            if ms_bundle not in ms_id_list:
+                ms_id_list.append(ms_bundle)
 
-        for wc_id, product_list in duplicates.items():
-            logging.warning("Product duplicates [{}]:\n\t{}".format(
-                wc_id,
-                "\n\t".join("{} ({})".format(product.get_id(), product.get_name()) for product in product_list)))
+        for wc_id, ms_product_list in dist_of_products.items():
+            if len(ms_product_list) > 1:
+                logging.warning("Product duplicates [{}]:\n\t{}".format(
+                    wc_id,
+                    "\n\t".join("{} ({})".format(product.get_id(), product.get_name()) for product in ms_product_list)))
 
         return
 
@@ -151,6 +170,53 @@ class ProductsSyncro:
             except DiscountHandlerException as e:
                 logging.error(str(e))
 
+    def create_new_bundles(self):
+        """Создаёт новые комплекты как обычные продукта WC"""
+
+        # FIXME исправить на фильтр когда зафиксят баг
+        for ms_bundle in Bundle.gen_list():
+            try:
+                ms_bundle: Bundle
+                import_flag = ms_bundle.get_attribute_by_name(IMPORT_FLAG_ATTR_NAME)
+                if import_flag is None:
+                    continue
+                if not import_flag.get_value():
+                    continue
+                wc_id = ms_bundle.get_attribute_by_name(WC_ID_ATTR_NAME)
+                if wc_id is not None:
+                    continue
+
+                wc_put_data = {
+                    'name': ms_bundle.get_name(),
+                    'status': 'draft',
+                    'type': 'simple'
+                }
+
+                wc_put_data.update(self.__get_wc_put_data_prices(ms_bundle))
+
+                wc_json = WcApi.post('products', data=wc_put_data)
+                response = MSApi.auch_put(
+                    "entity/bundle/{}".format(ms_bundle.get_id()),
+                    json={
+                        "attributes": [
+                            {
+                                'meta': self.__wc_id_attribute.get_meta().get_json(),
+                                "value": str(wc_json.get('id'))
+                            }
+                        ]
+                    })
+                error_handler(response)
+                logging.info("WC Product '{}' created".format(ms_bundle.get_name()))
+
+            except MSApiHttpException as e:
+                logging.error(str(e))
+            except SyncroException as e:
+                logging.error(str(e))
+            except WcApiException as e:
+                logging.error(str(e))
+            except DiscountHandlerException as e:
+                logging.error(str(e))
+
     @staticmethod
     def create_new_characteristics():
         """Создаёт новые характеристики товаров"""
@@ -194,6 +260,48 @@ class ProductsSyncro:
 
                     wc_put_data.update(self.__sync_name(ms_product, wc_product))
                     wc_put_data.update(self.__sync_prices(ms_product, wc_product))
+
+                    if wc_put_data:
+                        WcApi.put(f'products/{wc_product.get("id")}', data=wc_put_data)
+
+                except SyncroException as e:
+                    logging.error(str(e))
+                except DiscountHandlerException as e:
+                    logging.error(str(e))
+                except WcApiException as e:
+                    logging.error(str(e))
+
+        except MSApiHttpException as e:
+            logging.error(str(e))
+
+    def sync_bundles(self):
+        """Синхронизирует комплекты"""
+        try:
+            for ms_bundle in Bundle.gen_list():
+                try:
+                    ms_bundle: Bundle
+                    import_flag = ms_bundle.get_attribute_by_name(IMPORT_FLAG_ATTR_NAME)
+                    if import_flag is None:
+                        continue
+                    if not import_flag.get_value():
+                        continue
+                    wc_id = ms_bundle.get_attribute_by_name(WC_ID_ATTR_NAME)
+                    if wc_id is None:
+                        continue
+
+                    wc_id = ms_bundle.get_attribute_by_name(WC_ID_ATTR_NAME).get_value()
+
+                    wc_product = WcApi.get("products/{}".format(wc_id))
+                    wc_type = wc_product.get('type')
+                    if wc_product.get('type') == 'variable':
+                        raise SyncroException("[{}] Bundle cannot be variant".format(wc_id, wc_type)) # TODO sync variant
+                    elif wc_type != 'simple':
+                        raise SyncroException("[{}] Unsupported product type: {}".format(wc_id, wc_type))
+
+                    wc_put_data = {}
+
+                    wc_put_data.update(self.__sync_name(ms_bundle, wc_product))
+                    wc_put_data.update(self.__sync_prices(ms_bundle, wc_product))
 
                     if wc_put_data:
                         WcApi.put(f'products/{wc_product.get("id")}', data=wc_put_data)

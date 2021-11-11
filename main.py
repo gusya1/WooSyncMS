@@ -2,7 +2,7 @@ import configparser
 import os
 import sys
 
-from MSApi.MSApi import MSApi
+from MSApi.MSApi import MSApi, MSApiException, MSApiHttpException
 from WcApi import WcApi
 
 from CustomerOrderSyncro import CustomerOrderSyncro
@@ -42,12 +42,14 @@ if __name__ == '__main__':
             products_sync.find_duplicate_wc_products()
             products_sync.find_unsync_wc_products()
             products_sync.create_new_characteristics()
+            products_sync.create_new_bundles()
             products_sync.sync_products()
+            products_sync.sync_bundles()
             products_sync.create_new_products()
 
         if '--orders' in sys.argv:
             order_sync = CustomerOrderSyncro(sale_group_tag)
-            order_sync.check_and_correct_ms_phone_numbers()
+            # order_sync.check_and_correct_ms_phone_numbers()
             order_sync.sync_orders()
 
     except KeyError as e:
@@ -55,6 +57,8 @@ if __name__ == '__main__':
     except SyncroException as e:
         print(e)
     except WcApiException as e:
+        print(e)
+    except MSApiHttpException as e:
         print(e)
     except ReporterException as e:
         print(e)

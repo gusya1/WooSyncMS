@@ -3,7 +3,8 @@ from WcApi import WcApi
 import phonenumbers
 import logging
 
-from MSApi import Counterparty, MSApi, error_handler, MSApiException, MSApiHttpException, Filter, Organization, Service
+from MSApi import Counterparty, MSApi, error_handler, MSApiException, MSApiHttpException, Filter, Organization, Service, \
+    Bundle
 from MSApi import State, Project, Product, Order, Store
 from MSApi.documents.CustomerOrder import CustomerOrder
 
@@ -87,6 +88,22 @@ class CustomerOrderSyncro:
             self.last_order_num = order.get_name()
         self.last_order_num = int(self.last_order_num)
 
+    @staticmethod
+    def __get_bundle_by_wc_id(wc_product_id):
+        bundles = []
+        for ms_bundle in Bundle.gen_list(cached=True):
+            import_flag = ms_bundle.get_attribute_by_name('Импортировать в Интернет-магазин')
+            if import_flag is None:
+                continue
+            if not import_flag.get_value():
+                continue
+            wc_id = ms_bundle.get_attribute_by_name('wc_id')
+            if wc_id is None:
+                continue
+            if str(wc_product_id) == wc_id.get_value():
+                bundles.append(ms_bundle)
+        return bundles
+
     def sync_orders(self):
         for wc_order in WcApi.gen_all_wc(entity='orders', filters={'status': 'processing'}, cached=True):
             wc_order_id = wc_order['id']
@@ -133,6 +150,7 @@ class CustomerOrderSyncro:
                     wc_product_id = wc_product['product_id']
                     ms_product_list = list(MSApi.gen_products(filters=Filter.eq(self.product_wc_id_href,
                                                                                 wc_product_id)))
+                    ms_product_list += self.__get_bundle_by_wc_id(wc_product_id)
                     if len(ms_product_list) == 0:
                         raise RuntimeError("Product [{}] not found in MoySklad".format(wc_product_id))
                     elif len(ms_product_list) != 1:

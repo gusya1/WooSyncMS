@@ -1,5 +1,7 @@
 
 from typing import Union
+
+from MSApi import SalePricesMixin
 from MSApi.MSApi import MSApi, PriceType, Product, Service, Bundle, Variant, SpecialPriceDiscount
 from MSApi.Assortment import Assortment
 
@@ -37,12 +39,12 @@ class DiscountHandler:
 
     @classmethod
     @check_init
-    def get_default_price_value(cls, assort: Assortment):
+    def get_default_price_value(cls, assort: SalePricesMixin):
         for sale_price in assort.gen_sale_prices():
             if sale_price.get_price_type() == cls.__default_price_type:
                 return sale_price.get_value()
         else:
-            raise DiscountHandlerException(f"Default price type in {assort.get_name()} not found")
+            raise DiscountHandlerException(f"Default price type in {str(assort)} not found")
 
     @classmethod
     @check_init
