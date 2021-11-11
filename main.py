@@ -49,7 +49,7 @@ if __name__ == '__main__':
 
         if '--orders' in sys.argv:
             order_sync = CustomerOrderSyncro(sale_group_tag)
-            # order_sync.check_and_correct_ms_phone_numbers()
+            order_sync.check_and_correct_ms_phone_numbers()
             order_sync.sync_orders()
 
     except KeyError as e:
