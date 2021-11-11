@@ -110,6 +110,18 @@ class ProductsSyncro:
         for ms_product in MSApi.gen_products(filters=filters, cached=True):
             assortment_wc_ids.add(int(ms_product.get_attribute_by_name(WC_ID_ATTR_NAME).get_value()))
 
+        for ms_bundle in Bundle.gen_list():
+            ms_bundle: Bundle
+            import_flag = ms_bundle.get_attribute_by_name(IMPORT_FLAG_ATTR_NAME)
+            if import_flag is None:
+                continue
+            if not import_flag.get_value():
+                continue
+            wc_id = ms_bundle.get_attribute_by_name(WC_ID_ATTR_NAME)
+            if wc_id is None:
+                continue
+            assortment_wc_ids.add(int(wc_id.get_value()))
+
         for wc_product in WcApi.gen_all_wc_products(cached=True):
             wc_id = wc_product.get('id')
             if wc_id not in assortment_wc_ids:
@@ -288,8 +300,7 @@ class ProductsSyncro:
                     wc_id = ms_bundle.get_attribute_by_name(WC_ID_ATTR_NAME)
                     if wc_id is None:
                         continue
-
-                    wc_id = ms_bundle.get_attribute_by_name(WC_ID_ATTR_NAME).get_value()
+                    wc_id = wc_id.get_value()
 
                     wc_product = WcApi.get("products/{}".format(wc_id))
                     wc_type = wc_product.get('type')

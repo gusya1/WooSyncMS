@@ -37,7 +37,17 @@ if __name__ == '__main__':
         MSApi.set_access_token(config['moy_sklad']['access_token'])
         sale_group_tag = config['moy_sklad']['group_tag']
 
-        if (len(sys.argv) == 1) or ('--products' in sys.argv):
+        start_product_syncro = (len(sys.argv) == 1) or ('--products' in sys.argv)
+
+        if '--orders' in sys.argv:
+            logging.info("Starting CustomerOrder syncro...")
+            order_sync = CustomerOrderSyncro(sale_group_tag)
+            order_sync.check_and_correct_ms_phone_numbers()
+            start_product_syncro = start_product_syncro or order_sync.sync_orders()
+            logging.info("CustomerOrder syncro completed")
+
+        if start_product_syncro:
+            logging.info("Starting Assortment syncro...")
             products_sync = ProductsSyncro(sale_group_tag)
             products_sync.find_duplicate_wc_products()
             products_sync.find_unsync_wc_products()
@@ -46,11 +56,7 @@ if __name__ == '__main__':
             products_sync.sync_products()
             products_sync.sync_bundles()
             products_sync.create_new_products()
-
-        if '--orders' in sys.argv:
-            order_sync = CustomerOrderSyncro(sale_group_tag)
-            order_sync.check_and_correct_ms_phone_numbers()
-            order_sync.sync_orders()
+            logging.info("Assortment syncro completed")
 
     except KeyError as e:
         print(e)

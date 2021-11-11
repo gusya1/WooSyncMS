@@ -105,6 +105,7 @@ class CustomerOrderSyncro:
         return bundles
 
     def sync_orders(self):
+        start_product_syncro = False
         for wc_order in WcApi.gen_all_wc(entity='orders', filters={'status': 'processing'}, cached=True):
             wc_order_id = wc_order['id']
             try:
@@ -152,7 +153,9 @@ class CustomerOrderSyncro:
                                                                                 wc_product_id)))
                     ms_product_list += self.__get_bundle_by_wc_id(wc_product_id)
                     if len(ms_product_list) == 0:
-                        raise RuntimeError("Product [{}] not found in MoySklad".format(wc_product_id))
+                        start_product_syncro = True
+                        raise RuntimeError("Product [{}] not found in MoySklad. Assortment syncro will be started"
+                                           .format(wc_product_id))
                     elif len(ms_product_list) != 1:
                         raise RuntimeError("Product [{}] multiply definition in MoySklad".format(wc_product_id))
                     ms_product = ms_product_list[0]
@@ -190,6 +193,7 @@ class CustomerOrderSyncro:
                 logging.error("WC Order [{}]: Synchronize failed: {}".format(wc_order_id, str(e)))
             except MSApiException as e:
                 logging.error("WC Order [{}]: MoySklad error: {}".format(wc_order_id, str(e)))
+        return start_product_syncro
 
     @staticmethod
     def check_and_correct_ms_phone_numbers():
