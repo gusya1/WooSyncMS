@@ -40,6 +40,8 @@ class WcApi:
     @staticmethod
     def __check_error(response):
         if response.status_code not in [200, 201]:
+            if response.status_code in [503]:
+                raise WcApiException(str(response.text))
             raise WcApiException(response.json().get('message'))
 
     @classmethod
