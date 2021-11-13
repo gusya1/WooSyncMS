@@ -42,52 +42,53 @@ class ProductsSyncro:
             if attr.get_name() == WC_ID_ATTR_NAME:
                 self.__wc_id_attribute = attr
 
-        # self.__bundle_import_flag_attribute = None
-        # self.__bundle_wc_id_attribute = None
-        # for attr in Bundle.gen_attributes_list():
-        #     if attr.get_name() == IMPORT_FLAG_ATTR_NAME:
-        #         self.__import_flag_attribute = attr
-        #     if attr.get_name() == WC_ID_ATTR_NAME:
-        #         self.__wc_id_attribute = attr
-
         if self.__import_flag_attribute is None:
             raise SyncroException("product attribute '{}' not found".format(IMPORT_FLAG_ATTR_NAME))
         if self.__wc_id_attribute is None:
             raise SyncroException("product attribute '{}' not found".format(WC_ID_ATTR_NAME))
 
-    def find_duplicate_wc_products(self):
-        """
-        ищет повторяющиеся продукты и пишет о них в лог
-        """
+        self.wc_products = list(WcApi.gen_all_wc_products())
 
-        filters = Filter.eq(self.__import_flag_attribute.get_meta().get_href(), True)
-        filters += Filter.exists(self.__wc_id_attribute.get_meta().get_href(), True)
+        self.ms_products = list(Product.gen_list(
+            filters=Filter.eq(self.__import_flag_attribute.get_meta().get_href(), True)))
 
-        dist_of_products = {}
-
-        for ms_product in MSApi.gen_products(filters=filters, cached=True):
-            wc_id = ms_product.get_attribute_by_name(WC_ID_ATTR_NAME).get_value()
-            if wc_id is None:
-                continue
-
-            ms_id_list = dist_of_products.setdefault(wc_id, [])
-            if ms_product not in ms_id_list:
-                ms_id_list.append(ms_product)
-
-        for ms_bundle in Bundle.gen_list(cached=True):
-            ms_bundle: Bundle
+        self.ms_bundles = []
+        for ms_bundle in Bundle.gen_list():
             # FIXME исправить на фильтр когда зафиксят баг
             import_flag = ms_bundle.get_attribute_by_name(IMPORT_FLAG_ATTR_NAME)
             if import_flag is None:
                 continue
             if not import_flag.get_value():
                 continue
+            self.ms_bundles.append(ms_bundle)
+
+    def __get_wc_product_by_id(self, wc_id):
+        for wc_product in self.wc_products:
+            if wc_product['id'] == int(wc_id):
+                return wc_product
+        return None
+
+    def find_duplicate_wc_products(self):
+        """
+        ищет повторяющиеся продукты и пишет о них в лог
+        """
+        dist_of_products = {}
+
+        for ms_product in self.ms_products:
+            wc_id = ms_product.get_attribute_by_name(WC_ID_ATTR_NAME)
+            if wc_id is None:
+                continue
+            wc_id = wc_id.get_value()
+
+            ms_id_list = dist_of_products.setdefault(wc_id, [])
+            if ms_product not in ms_id_list:
+                ms_id_list.append(ms_product)
+
+        for ms_bundle in self.ms_bundles:
             wc_id = ms_bundle.get_attribute_by_name(WC_ID_ATTR_NAME)
             if wc_id is None:
                 continue
             wc_id = wc_id.get_value()
-            if wc_id is None:
-                continue
 
             ms_id_list = dist_of_products.setdefault(wc_id, [])
             if ms_bundle not in ms_id_list:
@@ -103,26 +104,22 @@ class ProductsSyncro:
 
     def find_unsync_wc_products(self):
         """Ищет несинхронизированные продукты WC и пишет о них в лог"""
-        filters = Filter.eq(self.__import_flag_attribute.get_meta().get_href(), True)
-        filters += Filter.exists(self.__wc_id_attribute.get_meta().get_href(), True)
 
         assortment_wc_ids = set()
-        for ms_product in MSApi.gen_products(filters=filters, cached=True):
+        for ms_product in self.ms_products:
+            wc_id = ms_product.get_attribute_by_name(WC_ID_ATTR_NAME)
+            if wc_id is None:
+                continue
             assortment_wc_ids.add(int(ms_product.get_attribute_by_name(WC_ID_ATTR_NAME).get_value()))
 
-        for ms_bundle in Bundle.gen_list():
+        for ms_bundle in self.ms_bundles:
             ms_bundle: Bundle
-            import_flag = ms_bundle.get_attribute_by_name(IMPORT_FLAG_ATTR_NAME)
-            if import_flag is None:
-                continue
-            if not import_flag.get_value():
-                continue
             wc_id = ms_bundle.get_attribute_by_name(WC_ID_ATTR_NAME)
             if wc_id is None:
                 continue
             assortment_wc_ids.add(int(wc_id.get_value()))
 
-        for wc_product in WcApi.gen_all_wc_products(cached=True):
+        for wc_product in self.wc_products:
             wc_id = wc_product.get('id')
             if wc_id not in assortment_wc_ids:
                 logging.warning(
@@ -136,12 +133,12 @@ class ProductsSyncro:
 
     def create_new_products(self):
         """Создаёт новые продукты"""
-        filters = Filter.eq(self.__import_flag_attribute.get_meta().get_href(), True)
-        filters = filters + Filter.exists(self.__wc_id_attribute.get_meta().get_href(), False)
 
-        for ms_product in MSApi.gen_products(filters=filters):
+        for ms_product in self.ms_products:
+            ms_product: Product
             try:
-                ms_product: Product
+                if ms_product.get_attribute_by_name(WC_ID_ATTR_NAME) is not None:
+                    continue
 
                 wc_put_data = {
                     'name': ms_product.get_name(),
@@ -186,16 +183,10 @@ class ProductsSyncro:
         """Создаёт новые комплекты как обычные продукта WC"""
 
         # FIXME исправить на фильтр когда зафиксят баг
-        for ms_bundle in Bundle.gen_list():
+        for ms_bundle in self.ms_bundles:
             try:
                 ms_bundle: Bundle
-                import_flag = ms_bundle.get_attribute_by_name(IMPORT_FLAG_ATTR_NAME)
-                if import_flag is None:
-                    continue
-                if not import_flag.get_value():
-                    continue
-                wc_id = ms_bundle.get_attribute_by_name(WC_ID_ATTR_NAME)
-                if wc_id is not None:
+                if ms_bundle.get_attribute_by_name(WC_ID_ATTR_NAME) is not None:
                     continue
 
                 wc_put_data = {
@@ -249,24 +240,31 @@ class ProductsSyncro:
     def sync_products(self):
         """Синхронизирует товары"""
         try:
-            filters = Filter.eq(self.__import_flag_attribute.get_meta().get_href(), True)
-            filters += Filter.exists(self.__wc_id_attribute.get_meta().get_href(), True)
-
-            for ms_product in MSApi.gen_products(filters=filters):
+            for ms_product in self.ms_products:
+                ms_product: Product
                 try:
-                    ms_product: Product
-                    wc_id = ms_product.get_attribute_by_name(WC_ID_ATTR_NAME).get_value()
+                    wc_id = ms_product.get_attribute_by_name(WC_ID_ATTR_NAME)
+                    if wc_id is None:
+                        continue
+                    wc_id = wc_id.get_value()
 
-                    wc_product = WcApi.get("products/{}".format(wc_id))
+                    wc_product = self.__get_wc_product_by_id(wc_id)
+                    if wc_product is None:
+                        raise SyncroException("[{}] WC Product not found".format(wc_id))
                     wc_type = wc_product.get('type')
                     if wc_product.get('type') == 'variable':
                         if not ms_product.has_variants():
-                            raise SyncroException("[{}] Change variant product to simple is not implemented now".format(wc_id)) # TODO change to simple
-                        raise SyncroException("[{}] Unsupported product type: {}".format(wc_id, wc_type)) # TODO sync variant
+                            # TODO change to simple
+                            raise SyncroException(
+                                "[{}] Change variant product to simple is not implemented now".format(wc_id))
+                        # TODO sync variant
+                        raise SyncroException("[{}] Unsupported product type: {}".format(wc_id, wc_type))
                     elif wc_type != 'simple':
                         raise SyncroException("[{}] Unsupported product type: {}".format(wc_id, wc_type))
                     elif ms_product.has_variants():
-                        raise SyncroException("[{}] Change simple product to variant is not implemented now".format(wc_id)) # TODO change to variant
+                        # TODO change to variant
+                        raise SyncroException(
+                            "[{}] Change simple product to variant is not implemented now".format(wc_id))
 
                     wc_put_data = {}
 
@@ -289,23 +287,21 @@ class ProductsSyncro:
     def sync_bundles(self):
         """Синхронизирует комплекты"""
         try:
-            for ms_bundle in Bundle.gen_list():
+            for ms_bundle in self.ms_bundles:
+                ms_bundle: Bundle
                 try:
-                    ms_bundle: Bundle
-                    import_flag = ms_bundle.get_attribute_by_name(IMPORT_FLAG_ATTR_NAME)
-                    if import_flag is None:
-                        continue
-                    if not import_flag.get_value():
-                        continue
                     wc_id = ms_bundle.get_attribute_by_name(WC_ID_ATTR_NAME)
                     if wc_id is None:
                         continue
                     wc_id = wc_id.get_value()
 
-                    wc_product = WcApi.get("products/{}".format(wc_id))
+                    wc_product = self.__get_wc_product_by_id(wc_id)
+                    if wc_product is None:
+                        raise SyncroException("[{}] WC Product not found".format(wc_id))
                     wc_type = wc_product.get('type')
                     if wc_product.get('type') == 'variable':
-                        raise SyncroException("[{}] Bundle cannot be variant".format(wc_id, wc_type)) # TODO sync variant
+                        # TODO sync variant
+                        raise SyncroException("[{}] Bundle cannot be variant".format(wc_id, wc_type))
                     elif wc_type != 'simple':
                         raise SyncroException("[{}] Unsupported product type: {}".format(wc_id, wc_type))
 
@@ -315,7 +311,7 @@ class ProductsSyncro:
                     wc_put_data.update(self.__sync_prices(ms_bundle, wc_product))
 
                     if wc_put_data:
-                        WcApi.put(f'products/{wc_product.get("id")}', data=wc_put_data)
+                        WcApi.put(f'products/{wc_id}', data=wc_put_data)
 
                 except SyncroException as e:
                     logging.error(str(e))
@@ -364,8 +360,8 @@ class ProductsSyncro:
         return wc_put_data
 
     def __get_wc_put_data_prices(self, ms_object,
-                               wc_regular_price: int = None,
-                               wc_sale_price: int = None):
+                                 wc_regular_price: int = None,
+                                 wc_sale_price: int = None):
         """вытаскивает из объекта МС обычную и скидочную цену, сравнивает с ценами WC
         и возвращает цены для отправки на сайт"""
         wc_put_data = {}

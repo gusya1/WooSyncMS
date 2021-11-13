@@ -63,7 +63,7 @@ if __name__ == '__main__':
     except SyncroException as e:
         print(e)
     except WcApiException as e:
-        print(e)
+        print("WooCommerce error: \'{}\'".format(e))
     except MSApiHttpException as e:
         print(e)
     except ReporterException as e:
