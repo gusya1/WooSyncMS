@@ -1,4 +1,4 @@
-MSApi==0.1.43
+MSApi==0.1.44
 WooCommerce==3.0.0
 requests==2.26.0
 phonenumbers==8.12.36

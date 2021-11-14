@@ -4,7 +4,7 @@ import phonenumbers
 import logging
 
 from MSApi import Counterparty, MSApi, error_handler, MSApiException, MSApiHttpException, Filter, Organization, Service, \
-    Bundle
+    Bundle, AttributeMixin
 from MSApi import State, Project, Product, Order, Store
 from MSApi.documents.CustomerOrder import CustomerOrder
 
@@ -30,6 +30,9 @@ delivery_dict = {
 
 store_name = 'Основной склад'
 
+WC_ID_ATTR_NAME = 'wc_id'
+IMPORT_FLAG_ATTR_NAME = 'Импортировать в Интернет-магазин'
+
 
 class CustomerOrderSyncro:
 
@@ -44,7 +47,7 @@ class CustomerOrderSyncro:
             raise RuntimeError("Store \'{}\' not found".format(store_name))
 
         self.states_dict = {}
-        for state in CustomerOrder.gen_states():
+        for state in CustomerOrder.gen_states_list():
             state: State
             payment_method = states_dict.get(state.get_name())
             if payment_method is None:
@@ -70,34 +73,32 @@ class CustomerOrderSyncro:
             service = Service.request_by_id(service_id)
             self.delivery_dict[zone_name] = service
 
-        for attr in Product.gen_attributes_list():
-            if attr.get_name() == 'wc_id':
-                self.product_wc_id_href = attr.get_meta().get_href()
-                break
-        else:
-            raise RuntimeError("Product attribute \'{}\' not found".format('wc_id'))
-
-        for attribute in CustomerOrder.gen_attributes_list():
-            if attribute.get_name() == 'wc_id':
-                self.wc_id_attribute = attribute
-                break
-        else:
-            raise RuntimeError("CustomerOrder attribute \'{}\' not found".format('wc_id'))
+        self.product_wc_id_href = self.__get_attribute_by_name(Product, WC_ID_ATTR_NAME).get_meta().get_href()
+        self.product_import_flag_href = self.__get_attribute_by_name(Product,
+                                                                     IMPORT_FLAG_ATTR_NAME).get_meta().get_href()
+        self.wc_id_attribute = self.__get_attribute_by_name(CustomerOrder, WC_ID_ATTR_NAME)
 
         for order in MSApi.gen_customer_orders(limit=1, orders=Order.desc('created')):
             self.last_order_num = order.get_name()
         self.last_order_num = int(self.last_order_num)
 
     @staticmethod
+    def __get_attribute_by_name(obj: type(AttributeMixin), name: str):
+        for attr in obj.gen_attributes_list():
+            if attr.get_name() == name:
+                return attr
+        raise RuntimeError("{} attribute \'{}\' not found".format(obj.__name__, name))
+
+    @staticmethod
     def __get_bundle_by_wc_id(wc_product_id):
         bundles = []
         for ms_bundle in Bundle.gen_list(cached=True):
-            import_flag = ms_bundle.get_attribute_by_name('Импортировать в Интернет-магазин')
+            import_flag = ms_bundle.get_attribute_by_name(IMPORT_FLAG_ATTR_NAME)
             if import_flag is None:
                 continue
             if not import_flag.get_value():
                 continue
-            wc_id = ms_bundle.get_attribute_by_name('wc_id')
+            wc_id = ms_bundle.get_attribute_by_name(WC_ID_ATTR_NAME)
             if wc_id is None:
                 continue
             if str(wc_product_id) == wc_id.get_value():
@@ -149,8 +150,10 @@ class CustomerOrderSyncro:
                 positions_post_data_list = []
                 for wc_product in wc_order['line_items']:
                     wc_product_id = wc_product['product_id']
-                    ms_product_list = list(MSApi.gen_products(filters=Filter.eq(self.product_wc_id_href,
-                                                                                wc_product_id)))
+
+                    filters = Filter.eq(self.product_wc_id_href, wc_product_id)
+                    filters += Filter.eq(self.product_import_flag_href, True)
+                    ms_product_list = list(MSApi.gen_products(filters=filters))
                     ms_product_list += self.__get_bundle_by_wc_id(wc_product_id)
                     if len(ms_product_list) == 0:
                         start_product_syncro = True
@@ -221,7 +224,7 @@ class CustomerOrderSyncro:
                         ms_formatted_number
                     ))
                 except phonenumbers.phonenumberutil.NumberParseException:
-                    logging.error(f"Counterparty \"{ms_cp.get_name()}\": Invalid phone: {ms_cp_phone}")
+                    logging.warning(f"Counterparty \"{ms_cp.get_name()}\": Invalid phone: {ms_cp_phone}")
                 except MSApiHttpException as e:
                     logging.error(str(e))
         except MSApiException as e:
@@ -275,10 +278,16 @@ class CustomerOrderSyncro:
             return ms_cp_list[0]
 
     def __create_new_counterparty(self, wc_order):
-        cp_name = self.__get_name_by_order(wc_order)
+
+        phone = self.__get_format_phone_by_order(wc_order)
+        if phone is None:
+            phone = wc_order.get('billing').get('phone')
+
+        cp_name = self.__get_name_by_order(wc_order, phone)
+
         ms_post_data = {
             'name': "{}".format(cp_name),
-            'phone': self.__get_format_phone_by_order(wc_order),
+            'phone': phone,
             'email': wc_order.get('billing').get('email'),
             'actualAddress': wc_order.get('billing').get('address_1'),
             'tags': [self.customer_tag]
@@ -289,17 +298,18 @@ class CustomerOrderSyncro:
         logging.info("New counterparty \'{}\' created".format(cp_name))
         return Counterparty(response.json())
 
-    def __get_name_by_order(self, wc_order):
+    @staticmethod
+    def __get_name_by_order(wc_order, phone):
         wc_billing = wc_order.get('billing')
         return "NEW {} {} {}".format(wc_billing.get('first_name'),
                                      wc_billing.get('last_name'),
-                                     self.__get_format_phone_by_order(wc_order) or "")
+                                     phone)
 
     @staticmethod
     def __get_format_phone_by_order(wc_order):
         wc_phone_str = wc_order.get('billing').get('phone')
         if wc_phone_str == '':
-            logging.debug("WC Order [{}]:\tPhone is empty".format(wc_order.get('id')))
+            logging.warning("WC Order [{}]:\tPhone is empty".format(wc_order.get('id')))
             return None
         try:
             wc_number = phonenumbers.parse(wc_phone_str, "RU")

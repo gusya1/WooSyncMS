@@ -107,4 +107,3 @@ class DiscountHandler:
             if productfolder == disc_folder:
                 return True
         return False
-
