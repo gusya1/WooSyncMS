@@ -1,4 +1,4 @@
-
+from MSApi import Employee, Task
 from MSApi.MSApi import MSApi, MSApiHttpException, Product, Variant, Bundle
 from MSApi.MSLowApi import error_handler
 from MSApi.properties import *
@@ -9,9 +9,7 @@ from WcApi import WcApi
 from exceptions import SyncroException, WcApiException
 import logging
 
-WC_ID_ATTR_NAME = 'wc_id'
-IMPORT_FLAG_ATTR_NAME = 'Импортировать в Интернет-магазин'
-SALE_GROUP_TAG = ''
+from settings import *
 
 
 def get_wc_prices(wc_product):
@@ -62,6 +60,19 @@ class ProductsSyncro:
                 continue
             self.ms_bundles.append(ms_bundle)
 
+        self.employee_for_tasks = Employee.request_by_id(EMPLOYEE_ID)
+
+    def __create_uniq_task(self, desc):
+        for task in Task.gen_list():
+            if task.get_description() == desc:
+                break
+        else:
+            task = Task({
+                'description': str(desc),
+                'assignee': {'meta': self.employee_for_tasks.get_meta().get_json()}
+            })
+            task.create_new()
+
     def __get_wc_product_by_id(self, wc_id):
         for wc_product in self.wc_products:
             if wc_product['id'] == int(wc_id):
@@ -96,9 +107,11 @@ class ProductsSyncro:
 
         for wc_id, ms_product_list in dist_of_products.items():
             if len(ms_product_list) > 1:
-                logging.warning("Product duplicates [{}]:\n\t{}".format(
+                warn_str = "Product duplicates [{}]:\n\t{}".format(
                     wc_id,
-                    "\n\t".join("{} ({})".format(product.get_id(), product.get_name()) for product in ms_product_list)))
+                    "\n\t".join("{} ({})".format(product.get_id(), product.get_name()) for product in ms_product_list))
+                self.__create_uniq_task(warn_str)
+                logging.warning(warn_str)
 
         return
 
@@ -122,14 +135,17 @@ class ProductsSyncro:
         for wc_product in self.wc_products:
             wc_id = wc_product.get('id')
             if wc_id not in assortment_wc_ids:
-                logging.warning(
-                    "WC Product unsyncronized: [{}] {}".format(wc_id, wc_product.get('name')))
+                warn_str = "WC Product unsyncronized: [{}] {}".format(wc_id, wc_product.get('name'))
+                self.__create_uniq_task(warn_str)
+                logging.warning(warn_str)
                 continue
             else:
                 assortment_wc_ids.remove(wc_id)
 
         for wc_id in assortment_wc_ids:
-            logging.warning("WC Product with \'{}\' id not found".format(wc_id))
+            warn_str = "WC Product with \'{}\' id not found".format(wc_id)
+            self.__create_uniq_task(warn_str)
+            logging.warning(warn_str)
 
     def create_new_products(self):
         """Создаёт новые продукты"""

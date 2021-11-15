@@ -3,35 +3,13 @@ from WcApi import WcApi
 import phonenumbers
 import logging
 
-from MSApi import Counterparty, MSApi, error_handler, MSApiException, MSApiHttpException, Filter, Organization, Service, \
-    Bundle, AttributeMixin
+from MSApi import Counterparty, MSApi, error_handler, MSApiException, MSApiHttpException, Filter, Organization, Service
+from MSApi import Bundle, AttributeMixin, Employee, Task
 from MSApi import State, Project, Product, Order, Store
 from MSApi.documents.CustomerOrder import CustomerOrder
 
 from exceptions import WcApiException
-
-states_dict = {
-    "Новый": 'cod',
-    "оплачен на сайте": 'tinkoff'
-}
-
-projects_dict = {
-    'С-Т': 'Пункт №1 ТУХАЧЕВСКОГО',
-    'С-П': 'Пункт №2 ПУШКИН'
-}
-
-delivery_dict = {
-    "Зона №6 (красная зона)": "37d8cd7f-238c-11eb-0a80-046a0001273e",
-    "Зона №1 (зелёная зона)": "e4ca996c-238a-11eb-0a80-063300016fe1",
-    "Зона №2 (оранжевая зона)": "e4ca996c-238a-11eb-0a80-063300016fe1",
-    "Зона №3 (синяя зона)": "a91db949-5572-11eb-0a80-003a0005e730",
-    "Зона №4 (фиолетовая зона)": "71dbb4a1-9f5c-11ea-0a80-0404000afc45"
-}
-
-store_name = 'Основной склад'
-
-WC_ID_ATTR_NAME = 'wc_id'
-IMPORT_FLAG_ATTR_NAME = 'Импортировать в Интернет-магазин'
+from settings import *
 
 
 class CustomerOrderSyncro:
@@ -40,36 +18,36 @@ class CustomerOrderSyncro:
         self.customer_tag = customer_tag
         self.organization: Organization = list(MSApi.gen_organizations())[0]  # TODO choose organization
         for store in Store.gen_list():
-            if store.get_name() == store_name:
+            if store.get_name() == STORE_NAME:
                 self.store: Store = store
                 break
         else:
-            raise RuntimeError("Store \'{}\' not found".format(store_name))
+            raise RuntimeError("Store \'{}\' not found".format(STORE_NAME))
 
         self.states_dict = {}
         for state in CustomerOrder.gen_states_list():
             state: State
-            payment_method = states_dict.get(state.get_name())
+            payment_method = STATES_DICT.get(state.get_name())
             if payment_method is None:
                 continue
             self.states_dict[payment_method] = state
-            del states_dict[state.get_name()]
-        if len(states_dict) != 0:
-            raise RuntimeError("States \'{}\' not found".format(states_dict.keys()))
+            del STATES_DICT[state.get_name()]
+        if len(STATES_DICT) != 0:
+            raise RuntimeError("States \'{}\' not found".format(STATES_DICT.keys()))
 
         self.projects_dict = {}
         for project in Project.gen_list():
             project: Project
-            pickup_store_name = projects_dict.get(project.get_name())
+            pickup_store_name = PROJECTS_DICT.get(project.get_name())
             if pickup_store_name is None:
                 continue
             self.projects_dict[pickup_store_name] = project
-            del projects_dict[project.get_name()]
-        if len(projects_dict) != 0:
-            raise RuntimeError("Projects \'{}\' not found".format(projects_dict.keys()))
+            del PROJECTS_DICT[project.get_name()]
+        if len(PROJECTS_DICT) != 0:
+            raise RuntimeError("Projects \'{}\' not found".format(PROJECTS_DICT.keys()))
 
         self.delivery_dict = {}
-        for zone_name, service_id in delivery_dict.items():
+        for zone_name, service_id in DELIVERY_DICT.items():
             service = Service.request_by_id(service_id)
             self.delivery_dict[zone_name] = service
 
@@ -78,7 +56,9 @@ class CustomerOrderSyncro:
                                                                      IMPORT_FLAG_ATTR_NAME).get_meta().get_href()
         self.wc_id_attribute = self.__get_attribute_by_name(CustomerOrder, WC_ID_ATTR_NAME)
 
-        for order in MSApi.gen_customer_orders(limit=1, orders=Order.desc('created')):
+        self.employee_for_tasks = Employee.request_by_id(EMPLOYEE_ID)
+
+        for order in CustomerOrder.gen_list(limit=1, orders=Order.desc('created')):
             self.last_order_num = order.get_name()
         self.last_order_num = int(self.last_order_num)
 
@@ -157,10 +137,12 @@ class CustomerOrderSyncro:
                     ms_product_list += self.__get_bundle_by_wc_id(wc_product_id)
                     if len(ms_product_list) == 0:
                         start_product_syncro = True
-                        raise RuntimeError("Product [{}] not found in MoySklad. Assortment syncro will be started"
+                        raise RuntimeError("Product [{}] not found in MoySklad."
                                            .format(wc_product_id))
                     elif len(ms_product_list) != 1:
-                        raise RuntimeError("Product [{}] multiply definition in MoySklad".format(wc_product_id))
+                        warn_str = "Product [{}] multiply definition in MoySklad".format(wc_product_id)
+                        self.__create_uniq_task(warn_str)
+                        raise RuntimeError(warn_str)
                     ms_product = ms_product_list[0]
                     ms_post_position = {
                         'assortment': {'meta': ms_product.get_meta().get_json()},
@@ -198,8 +180,7 @@ class CustomerOrderSyncro:
                 logging.error("WC Order [{}]: MoySklad error: {}".format(wc_order_id, str(e)))
         return start_product_syncro
 
-    @staticmethod
-    def check_and_correct_ms_phone_numbers():
+    def check_and_correct_ms_phone_numbers(self):
         """проверяет формат телефонных номеров контрагентов и исправляет при необходимости"""
         try:
             for ms_cp in Counterparty.gen_list():
@@ -224,11 +205,25 @@ class CustomerOrderSyncro:
                         ms_formatted_number
                     ))
                 except phonenumbers.phonenumberutil.NumberParseException:
+                    warn_str = f"Counterparty \"{ms_cp.get_name()}\": Invalid phone: {ms_cp_phone}"
                     logging.warning(f"Counterparty \"{ms_cp.get_name()}\": Invalid phone: {ms_cp_phone}")
+                    self.__create_uniq_task(warn_str)
+
                 except MSApiHttpException as e:
                     logging.error(str(e))
         except MSApiException as e:
             logging.error(str(e))
+
+    def __create_uniq_task(self, desc):
+        for task in Task.gen_list():
+            if task.get_description() == desc:
+                break
+        else:
+            task = Task({
+                'description': str(desc),
+                'assignee': {'meta': self.employee_for_tasks.get_meta().get_json()}
+            })
+            task.create_new()
 
     @staticmethod
     def __find_customer_order_by_phone(wc_order):
