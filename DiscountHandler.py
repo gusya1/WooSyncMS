@@ -2,7 +2,8 @@
 from typing import Union
 
 from MSApi import SalePricesMixin
-from MSApi.MSApi import MSApi, PriceType, Product, Service, Bundle, Variant, SpecialPriceDiscount
+from MSApi.MSApi import MSApi, PriceType, Product, Service, Bundle, Variant
+from MSApi import SpecialPriceDiscount
 from MSApi.Assortment import Assortment
 
 
@@ -25,7 +26,7 @@ class DiscountHandler:
 
     @classmethod
     def init(cls):
-        for discount in MSApi.gen_special_price_discounts():
+        for discount in SpecialPriceDiscount.gen_list():
             if not discount.is_active():
                 continue
             cls.__active_discounts.append(discount)
@@ -88,8 +89,7 @@ class DiscountHandler:
                                       assort: Union[Product, Service, Bundle, Variant]) -> bool:
         if discount.is_all_products():
             return True
-        for obj_meta in discount.gen_assortment():
-            obj = MSApi.get_object_by_meta(obj_meta)
+        for obj in discount.gen_assortment():
             if not issubclass(type(obj), Assortment):
                 continue
             else:
