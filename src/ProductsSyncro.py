@@ -5,11 +5,11 @@ from MSApi.properties import *
 
 from DiscountHandler import DiscountHandler, DiscountHandlerException
 
-from WcApi import WcApi
+from src.WcApi import WcApi
 from exceptions import SyncroException, WcApiException
 import logging
 
-from settings import *
+from src.settings import *
 
 
 def get_wc_prices(wc_product):

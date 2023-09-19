@@ -1,4 +1,4 @@
-from WcApi import WcApi
+from src.WcApi import WcApi
 
 import phonenumbers
 import logging
@@ -9,7 +9,7 @@ from MSApi import State, Project, Product, Order, Store
 from MSApi.documents.CustomerOrder import CustomerOrder
 
 from exceptions import WcApiException
-from settings import *
+from src.settings import *
 
 
 class CustomerOrderSyncro:

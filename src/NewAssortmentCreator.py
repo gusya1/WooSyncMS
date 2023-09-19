@@ -1,4 +1,4 @@
-from WcApi import *
+from src.WcApi import *
 from Reporter import *
 from MSApi.MSApi import *
 from MSApi.properties import *

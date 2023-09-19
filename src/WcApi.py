@@ -1,5 +1,5 @@
 from woocommerce import API
-from exceptions import WcApiException
+from src.exceptions import WcApiException
 from MSApi import caching
 
 
