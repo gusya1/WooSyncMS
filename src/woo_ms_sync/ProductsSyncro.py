@@ -1,15 +1,14 @@
+import logging
+
 from MSApi import Employee, Task
 from MSApi.MSApi import MSApi, MSApiHttpException, Product, Variant, Bundle
 from MSApi.MSLowApi import error_handler
 from MSApi.properties import *
 
 from DiscountHandler import DiscountHandler, DiscountHandlerException
-
-from src.WcApi import WcApi
 from exceptions import SyncroException, WcApiException
-import logging
-
-from src.settings import *
+from src.woo_ms_sync.WcApi import WcApi
+from src.woo_ms_sync.settings import *
 
 
 def get_wc_prices(wc_product):

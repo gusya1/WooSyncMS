@@ -1,14 +1,14 @@
 import configparser
+import logging
 import os
 import sys
 
 from MSApi.MSApi import MSApi, MSApiHttpException
-from src.WcApi import WcApi
 
 from CustomerOrderSyncro import CustomerOrderSyncro
 from ProductsSyncro import ProductsSyncro
 from exceptions import *
-import logging
+from src.woo_ms_sync.WcApi import WcApi
 
 
 def get_settings_list_parameter(parameter):

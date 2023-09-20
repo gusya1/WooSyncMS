@@ -1,18 +1,23 @@
-from src.WcApi import *
-from Reporter import *
+from typing import Union, List
+
 from MSApi.MSApi import *
-from MSApi.properties import *
 from MSApi.Variant import *
+from MSApi.properties import *
+from woo_commerce_models.product import Product as WcProduct
+
 from DiscountHandler import DiscountHandler, DiscountHandlerException
+from Reporter import *
 from exceptions import *
-from typing import Union
+from src.woo_ms_sync.WcApi import *
+
+from synchronization_utils import get_wooms_href
 
 reporter = Reporter()
 
 
 class NewAssortmentCreator:
 
-    def __init__(self, wc_products: {}, sale_group_tag):
+    def __init__(self, wc_products: List[WcProduct], sale_group_tag):
         self.__productfolder_ids_blacklist = []
         self.__assortment_ids_blacklist = []
         self.__sale_group_tag = sale_group_tag

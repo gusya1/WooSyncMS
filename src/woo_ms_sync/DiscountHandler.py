@@ -2,9 +2,9 @@
 from typing import Union
 
 from MSApi import SalePricesMixin
-from MSApi.MSApi import MSApi, PriceType, Product, Service, Bundle, Variant
 from MSApi import SpecialPriceDiscount
 from MSApi.Assortment import Assortment
+from MSApi.MSApi import MSApi, PriceType, Product, Service, Bundle, Variant
 
 
 class DiscountHandlerException(Exception):

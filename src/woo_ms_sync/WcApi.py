@@ -1,6 +1,7 @@
-from woocommerce import API
-from src.exceptions import WcApiException
 from MSApi import caching
+from woocommerce import API
+
+from src import WcApiException
 
 
 class WcApi:
@@ -76,13 +77,3 @@ def gen_all_wc_variations(wc_product_id):
         for wc_product in wc_product_list:
             yield wc_product
         page_iterator += 1
-
-def get_wooms_href(wc_product):
-    wc_meta_list = wc_product.get('meta_data')
-    for wc_meta in wc_meta_list:
-        if wc_meta.get('key') != 'wooms_href':
-            continue
-        return wc_meta.get('value')
-    else:
-        return None
-

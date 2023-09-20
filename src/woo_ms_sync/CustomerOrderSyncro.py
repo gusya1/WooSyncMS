@@ -1,21 +1,33 @@
-from src.WcApi import WcApi
-
-import phonenumbers
 import logging
 
+import phonenumbers
+from MSApi import Bundle, Employee, Task
 from MSApi import Counterparty, MSApi, error_handler, MSApiException, MSApiHttpException, Filter, Organization, Service
-from MSApi import Bundle, AttributeMixin, Employee, Task
 from MSApi import State, Project, Product, Order, Store
 from MSApi.documents.CustomerOrder import CustomerOrder
 
-from exceptions import WcApiException
-from src.settings import *
+from moy_sklad_api.api import Session as MSSession
+from moy_sklad_api.attributes import gen_attributes_list
+
+from exceptions import WcApiException, MoySkladError
+from src.woo_ms_sync import WcApi
+
+
+def _get_attribute_by_name(session, type_name, name: str):
+    named_attributes = list(attr for attr in gen_attributes_list(session, type_name) if attr.name == name)
+    if not named_attributes:
+        raise MoySkladError("{} attribute \'{}\' not found".format(type_name, name))
+    if len(named_attributes) > 1:
+        raise MoySkladError("{} attribute \'{}\' multiply definition".format(type_name, name))
+    return named_attributes[0]
 
 
 class CustomerOrderSyncro:
 
-    def __init__(self, customer_tag):
+    def __init__(self, session: MSSession, customer_tag):
+        self.session = session
         self.customer_tag = customer_tag
+
         self.organization: Organization = list(MSApi.gen_organizations())[0]  # TODO choose organization
         for store in Store.gen_list():
             if store.get_name() == STORE_NAME:
