@@ -3,11 +3,20 @@ from Reporter import *
 from MSApi.MSApi import *
 from MSApi.properties import *
 from MSApi.Variant import *
-from DiscountHandler import DiscountHandler, DiscountHandlerException
+from MSApi.Product import Product
+from MSApi.Service import Service
+from MSApi.Bundle import Bundle
+from MSApi.DiscountHandler import DiscountHandler
 from exceptions import *
 from typing import Union
 
 reporter = Reporter()
+
+
+def get_product_by_id(product_id, **kwargs):
+    response = MSApi.auch_get(f'entity/product/{product_id}', **kwargs)
+    error_handler(response)
+    return Product(response.json())
 
 
 class NewAssortmentCreator:
@@ -50,11 +59,11 @@ class NewAssortmentCreator:
         self.__create_new_wc_bundles()
 
     def create_new_product(self, ms_id):
-        ms_product = MSApi.get_product_by_id(ms_id)
+        ms_product = get_product_by_id(ms_id)
         return "Product added {}".format(self.__create_new_wc_product(ms_product))
 
     def __create_new_wc_variants(self):
-        for ms_variation in MSApi.gen_variants():
+        for ms_variation in Variant.gen_list():
             if not self.__check_assortment(ms_variation):
                 continue
             wc_product_id = self.__sync_wc_products.get(ms_variation.get_product().get_meta().get_href())
@@ -64,7 +73,7 @@ class NewAssortmentCreator:
 
     # @except_discount_exception
     def __create_new_wc_products(self):
-        for ms_product in MSApi.gen_products(expand=Expand('productFolder')):
+        for ms_product in Product.gen_list(expand=Expand('productFolder')):
             try:
                 self.__create_new_wc_product(ms_product)
             except CheckAssortmentException:
@@ -102,7 +111,7 @@ class NewAssortmentCreator:
 
     # @except_discount_exception
     def __create_new_wc_services(self):
-        for ms_service in MSApi.gen_services(expand=Expand('productFolder')):
+        for ms_service in Service.gen_list(expand=Expand('productFolder')):
             try:
                 self.__check_assortment(ms_service)
 
@@ -126,7 +135,7 @@ class NewAssortmentCreator:
 
     # @except_discount_exception
     def __create_new_wc_bundles(self):
-        for ms_bundle in MSApi.gen_bundles(expand=Expand('productFolder')):
+        for ms_bundle in Bundle.gen_list(expand=Expand('productFolder')):
             try:
                 self.__check_assortment(ms_bundle)
 
@@ -149,7 +158,7 @@ class NewAssortmentCreator:
 
     def __create_new_wc_variations(self, wc_product_id, ms_product_id):
         all_characteristics: {str: [Characteristic]} = {}
-        for ms_variant in MSApi.gen_variants(filters=Filter.eq('productid', ms_product_id)):
+        for ms_variant in Variant.gen_list(filters=Filter.eq('productid', ms_product_id)):
             for characteristic in ms_variant.gen_characteristics():
                 all_characteristics.setdefault(characteristic.get_name(), []).append(characteristic)
 
@@ -159,52 +168,50 @@ class NewAssortmentCreator:
             for ms_characteristic in ms_characteristic_list:
                 characteristic_values.append(ms_characteristic.get_value())
             list_wc_attributes.append({
-                    "name": name,
-                    "visible": True,
-                    "variation": True,
-                    "options": characteristic_values
-                })
+                "name": name,
+                "visible": True,
+                "variation": True,
+                "options": characteristic_values
+            })
 
         wc_put_data = {'attributes': list_wc_attributes}
         wc_product = WcApi.put(f'products/{wc_product_id}', wc_put_data)
 
-        for ms_variant in MSApi.gen_variants(filters=Filter.eq('productid', ms_product_id)):
+        for ms_variant in Variant.gen_list(filters=Filter.eq('productid', ms_product_id)):
             self.__create_wc_variant(ms_variant, wc_product)
 
     # @except_discount_exception
     def __create_wc_variant(self, ms_variant, wc_product):
-        try:
-            wc_variant_put_data = {
-                'status': 'draft',
-                'meta_data': [
-                    {
-                        'key': 'wooms_href',
-                        'value': ms_variant.get_meta().get_href()
-                    }
-                ]
-            }
-            wc_variant_put_data |= self.__get_wc_put_data_prices(ms_variant)
+        wc_variant_put_data = {
+            'status': 'draft',
+            'meta_data': [
+                {
+                    'key': 'wooms_href',
+                    'value': ms_variant.get_meta().get_href()
+                }
+            ]
+        }
+        wc_variant_put_data |= self.__get_wc_put_data_prices(ms_variant)
 
-            report_attributes_strings = []
-            attributes_list = []
-            for characteristic in ms_variant.gen_characteristics():
-                for wc_attr in wc_product.get('attributes'):
-                    if wc_attr.get('name') == characteristic.get_name():
-                        break
-                else:
-                    raise SyncroException(f"Characteristic {characteristic.get_name()} not found")
-                attributes_list.append({
-                    'id': wc_attr.get('id'),
-                    'option': characteristic.get_value()
-                })
-                report_attributes_strings.append(f'"{characteristic.get_name()}" : {characteristic.get_value()}')
-            wc_variant_put_data['attributes'] = attributes_list
-            WcApi.put(f'products/{wc_product.get(id)}/variations', wc_variant_put_data)
-            Reporter.append_report('new_variants', 'In product "{}" with attributes:\n{}'.format(
-                ms_variant.get_name(),
-                "\n\t".join(report_attributes_strings)))
-        except DiscountHandlerException as e:
-            Reporter.append_report('errors', str(e))
+        report_attributes_strings = []
+        attributes_list = []
+        for characteristic in ms_variant.gen_characteristics():
+            for wc_attr in wc_product.get('attributes'):
+                if wc_attr.get('name') == characteristic.get_name():
+                    break
+            else:
+                raise SyncroException(f"Characteristic {characteristic.get_name()} not found")
+            attributes_list.append({
+                'id': wc_attr.get('id'),
+                'option': characteristic.get_value()
+            })
+            report_attributes_strings.append(f'"{characteristic.get_name()}" : {characteristic.get_value()}')
+        wc_variant_put_data['attributes'] = attributes_list
+        WcApi.put(f'products/{wc_product.get(id)}/variations', wc_variant_put_data)
+        Reporter.append_report('new_variants',
+                               'In product "{}" with attributes:\n{}'.format(ms_variant.get_name(),
+                                                                             "\n\t".join(
+                                                                                 report_attributes_strings)))
 
     def __get_wc_put_data_prices(self, ms_object,
                                  wc_regular_price: int = None,
@@ -245,4 +252,3 @@ class NewAssortmentCreator:
             if wc_product_id is None:
                 raise SyncroException(f"Parent of modification not found: \"{ms_object.get_id()}\"")
         return
-

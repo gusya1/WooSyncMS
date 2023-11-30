@@ -1,9 +1,10 @@
 from MSApi import Employee, Task
-from MSApi.MSApi import MSApi, MSApiHttpException, Product, Variant, Bundle
+from MSApi.MSApi import MSApi, MSApiHttpException, Product
+from MSApi import Bundle
+from MSApi import Variant
+from MSApi.DiscountHandler import DiscountHandler
 from MSApi.MSLowApi import error_handler
 from MSApi.properties import *
-
-from DiscountHandler import DiscountHandler, DiscountHandlerException
 
 from WcApi import WcApi
 from exceptions import SyncroException, WcApiException
@@ -192,8 +193,6 @@ class ProductsSyncro:
                 logging.error(str(e))
             except WcApiException as e:
                 logging.error(str(e))
-            except DiscountHandlerException as e:
-                logging.error(str(e))
 
     def create_new_bundles(self):
         """Создаёт новые комплекты как обычные продукта WC"""
@@ -232,8 +231,6 @@ class ProductsSyncro:
             except SyncroException as e:
                 logging.error(str(e))
             except WcApiException as e:
-                logging.error(str(e))
-            except DiscountHandlerException as e:
                 logging.error(str(e))
 
     @staticmethod
@@ -292,8 +289,6 @@ class ProductsSyncro:
 
                 except SyncroException as e:
                     logging.error(str(e))
-                except DiscountHandlerException as e:
-                    logging.error(str(e))
                 except WcApiException as e:
                     logging.error(str(e))
 
@@ -330,8 +325,6 @@ class ProductsSyncro:
                         WcApi.put(f'products/{wc_id}', data=wc_put_data)
 
                 except SyncroException as e:
-                    logging.error(str(e))
-                except DiscountHandlerException as e:
                     logging.error(str(e))
                 except WcApiException as e:
                     logging.error(str(e))

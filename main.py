@@ -2,7 +2,7 @@ import configparser
 import os
 import sys
 
-from MSApi.MSApi import MSApi, MSApiException, MSApiHttpException
+from MSApi.MSApi import MSApi, MSApiHttpException
 from WcApi import WcApi
 
 from CustomerOrderSyncro import CustomerOrderSyncro

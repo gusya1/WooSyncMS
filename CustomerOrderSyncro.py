@@ -16,7 +16,7 @@ class CustomerOrderSyncro:
 
     def __init__(self, customer_tag):
         self.customer_tag = customer_tag
-        self.organization: Organization = list(MSApi.gen_organizations())[0]  # TODO choose organization
+        self.organization: Organization = list(Organization.gen_list())[0]  # TODO choose organization
         for store in Store.gen_list():
             if store.get_name() == STORE_NAME:
                 self.store: Store = store
@@ -133,7 +133,7 @@ class CustomerOrderSyncro:
 
                     filters = Filter.eq(self.product_wc_id_href, wc_product_id)
                     filters += Filter.eq(self.product_import_flag_href, True)
-                    ms_product_list = list(MSApi.gen_products(filters=filters))
+                    ms_product_list = list(Product.gen_list(filters=filters))
                     ms_product_list += self.__get_bundle_by_wc_id(wc_product_id)
                     if len(ms_product_list) == 0:
                         start_product_syncro = True
